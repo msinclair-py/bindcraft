@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from chai_lab.chai1 import run_inference
+import gemmi
 from pathlib import Path
 import shutil
 from string import Template
@@ -42,9 +43,10 @@ class Chai(Folding):
 
     def __call__(self, 
                  seqs: list[str],
-                 label: str) -> Path:
-        fasta = self.prepare(seqs, label)
-        out = self.devshm / label
+                 exp_label: str,
+                 out_label: str) -> Path:
+        fasta = self.prepare(seqs, exp_label)
+        out = self.devshm / exp_label
         out.mkdir(exist_ok=True, parents=True)
 
         run_inference(
@@ -54,13 +56,17 @@ class Chai(Folding):
             use_esm_embeddings=True,
         )
 
-        return self.postprocess(out)
+        return self.postprocess(out, out_label)
 
     def postprocess(self,
-                    in_path: Path) -> Path:
+                    in_path: Path,
+                    out_name: str) -> Path:
         best_model = in_path / 'pred.model_idx_0.cif'
-        final_path = self.out / best_model.name
-        shutil.move(str(best_model), str(final_path))
+        final_path = self.out / f'{out_name}.pdb'
+
+        structure = gemmi.read_structure(str(best_model))
+        structure.write_pdb(str(final_path))
+
         shutil.rmtree(str(in_path))
         return final_path
 

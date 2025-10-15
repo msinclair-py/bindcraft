@@ -36,7 +36,8 @@ class BindCraft:
         self.qc = qc_filter if qc_filter else SequenceQualityControl()
 
         self.n_rounds = n_rounds
-        self.label = Template('trial_${trial}_seq_${seq}')
+        self.label = Template('trial_$trial')
+        self.seq_label = Template('seq_$seq')
         self.trial = 0
         self.bnum = 1
         self.remodel = None
@@ -76,20 +77,25 @@ class BindCraft:
 
     def cycle(self) -> dict[str, dict]:
         if self.trial == 0:
-            input_path = Path('.')
+            fasta_in = Path('.')
             pdb_path = Path('.')
-            output_path = Path('inverse_folds') / f'trial_{self.trial}'
+            fasta_out = Path('inverse_folds') / f'trial_{self.trial}'
+            structure_out = Path('folds') / f'trial_{self.trial}'
         else:
-            input_path = Path('inverse_folds') / f'trial_{self.trial-1}'
+            fasta_in = Path('inverse_folds') / f'trial_{self.trial-1}'
             pdb_path = input_path
-            output_path = Path('inverse_folds') / f'trial_{self.trial}'
+            fasta_out = Path('inverse_folds') / f'trial_{self.trial}'
+            structure_out = Path('folds') / f'trial_{self.trial}'
         
-        output_path.mkdir(exist_ok=True, parents=True)
+        fasta_out.mkdir(exist_ok=True, parents=True)
+        structure_out.mkdir(exist_ok=True, parents=True)
+
+        self.fold.out = structure_out
         
         inverse_fold_seqs = self.inv_fold(
-            input_path,
+            fasta_in,
             pdb_path,
-            output_path,
+            fasta_out,
             self.remodel
         )
         
@@ -97,8 +103,9 @@ class BindCraft:
         
         structures = {}
         for i, seq in enumerate(filtered_seqs):
-            label = self.label.substitute(trial=self.trial, seq=i)
-            structure = self.fold([self.target, seq], label)
+            label = self.label.substitute(trial=self.trial)
+            seq_label = self.seq_label.substitute(seq=i)
+            structure = self.fold([self.target, seq], label, seq_label)
             
             structures[self.bnum] = {
                 'sequence': seq, 

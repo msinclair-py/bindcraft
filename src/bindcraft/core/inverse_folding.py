@@ -25,34 +25,48 @@ class ProteinMPNN(InverseFolding):
                  num_seq: int = 1,
                  sampling_temp: str = '0.1',
                  batch_size: int = 2,
-                 model_name: str = '',
-                 model_weights: str = ''):
+                 model_name: str = 'v_48_020',
+                 model_weights: str = 'soluble_model_weights',
+                 device: str = 'xpu:0'):
         self.proteinmpnn_path = Path(proteinmpnn_path)
         self.run_py = self.proteinmpnn_path / 'protein_mpnn_run.py'
         self.helpers = [
             self.proteinmpnn_path / 'helper_scripts' / 'parse_multiple_chains.py',
-            self.proteinmpnn_path / 'helper_scripts' / 'assign_fixed_chains.py'
+            self.proteinmpnn_path / 'helper_scripts' / 'assign_fixed_chains.py',
+            self.proteinmpnn_path / 'helper_scripts' / 'make_fixed_positions_dict.py'
         ]
         self.num_seq = num_seq
         self.sampling_temp = sampling_temp
         self.batch_size = batch_size
         self.model_name = model_name
-        self.model_weights = model_weights
-        self.file_intermediates = ['parsed_pdbs.jsonl', 'chain_B_design.jsonl']
+        self.model_weights = self.proteinmpnn_path / model_weights
+        self.device = device
+        self.file_intermediates = ['parsed_design.jsonl', 
+                                   'chain_B_design.jsonl', 
+                                   'fixed_design.jsonl']
 
     def prepare(self,
                 pdb_path: Path,
-                file1: Path,
-                file2: Path) -> None:
+                parsed: Path,
+                assigned: Path,
+                fixed: Path,
+                fixed_indices: list[int]) -> None:
         args = [
             [
                 '--input_path', str(pdb_path), 
-                '--output_path', str(file1),
+                '--output_path', str(parsed),
             ],
             [
-                '--input_path', str(file1),
-                '--output_path', str(file2),
+                '--input_path', str(parsed),
+                '--output_path', str(assigned),
                 '--chain_list', 'B'
+            ],
+            [
+                '--input_path', str(assigned),
+                '--output_path', str(fixed),
+                '--chain_list', 'B',
+                '--position_list', ' '.join([str(x) for x in fixed_indices]),
+                '--specify_non_fixed'
             ]
         ]
 
@@ -63,7 +77,7 @@ class ProteinMPNN(InverseFolding):
                  input_path: Path,
                  pdb_path: Path,
                  output_path: Path,
-                 remodel_positions: list[int] = None):
+                 remodel_positions: list[int]):
         input_path = Path(input_path)
         pdb_path = Path(pdb_path)
         output_path = Path(output_path)
@@ -72,7 +86,7 @@ class ProteinMPNN(InverseFolding):
         output_path.mkdir(exist_ok=True, parents=True)
         
         jsonls = [input_path / fi for fi in self.file_intermediates]
-        self.prepare(pdb_path, *jsonls)
+        self.prepare(pdb_path, *jsonls, remodel_positions)
         self.run(jsonls, output_path)
         return self.postprocessing(output_path)
 
@@ -83,17 +97,16 @@ class ProteinMPNN(InverseFolding):
             sys.executable, str(self.run_py),
             '--jsonl_path', str(jsonls[0]),
             '--chain_id_jsonl', str(jsonls[1]),
+            '--fixed_positions_jsonl', str(jsonls[2]),
             '--out_folder', str(output),
             '--num_seq_per_target', str(self.num_seq),
             '--sampling_temp', self.sampling_temp,
             '--batch_size', str(self.batch_size),
+            '--model_name', self.model_name,
+            '--path_to_model_weights', self.model_weights,
+            '--device', self.device,
         ]
         
-        if self.model_name:
-            cmd.extend(['--model_name', self.model_name])
-        if self.model_weights:
-            cmd.extend(['--path_to_model_weights', self.model_weights])
-
         subprocess.run(cmd, check=True)
 
     def postprocessing(self,

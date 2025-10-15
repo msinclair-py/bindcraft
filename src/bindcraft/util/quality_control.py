@@ -14,7 +14,7 @@ class SequenceQualityControl:
                  max_appearance_ratio: float = 0.33,
                  max_charge: int = 5,
                  max_charge_ratio: float = 0.5,
-                 max_hydrophobic_ratio: float = 0.4,
+                 max_hydrophobic_ratio: float = 0.6,
                  min_diversity: int = 8,
                  bad_motifs: list[str] = None,
                  bad_n_termini: list[str] = None):
@@ -131,7 +131,7 @@ class SequenceQualityControl:
 
 
 def filter_sequences(sequences: list[str], 
-                    qc: SequenceQualityControl = None) -> list[str]:
+                     qc: SequenceQualityControl = None) -> list[str]:
     """
     Filter a list of sequences using QC criteria.
     

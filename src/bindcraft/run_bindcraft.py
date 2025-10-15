@@ -45,15 +45,15 @@ def main():
     # Pipeline parameters
     parser.add_argument('--n_rounds', type=int, default=3,
                        help='Number of design rounds (default: 3)')
-    parser.add_argument('--n_seqs', type=int, default=100,
+    parser.add_argument('--n_seqs', type=int, default=1000,
                        help='Number of sequences per round (default: 100)')
     parser.add_argument('--temp', type=str, default='0.1',
                        help='ProteinMPNN sampling temperature (default: 0.1)')
-    parser.add_argument('--cutoff', type=float, default=5.0,
+    parser.add_argument('--cutoff', type=float, default=4.0,
                        help='Interface distance cutoff in Å (default: 5.0)')
     
     # Quality control parameters
-    parser.add_argument('--max_hydrophobic', type=float, default=0.4,
+    parser.add_argument('--max_hydrophobic', type=float, default=0.6,
                        help='Maximum hydrophobic ratio (default: 0.4)')
     parser.add_argument('--max_charge', type=int, default=5,
                        help='Maximum net charge (default: 5)')
