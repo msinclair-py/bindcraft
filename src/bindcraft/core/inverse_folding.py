@@ -24,7 +24,7 @@ class ProteinMPNN(InverseFolding):
                  proteinmpnn_path: Path,
                  num_seq: int = 1,
                  sampling_temp: str = '0.1',
-                 batch_size: int = 2,
+                 batch_size: int = 250,
                  model_name: str = 'v_48_020',
                  model_weights: str = 'soluble_model_weights',
                  device: str = 'xpu:0'):
@@ -62,7 +62,7 @@ class ProteinMPNN(InverseFolding):
                 '--chain_list', 'B'
             ],
             [
-                '--input_path', str(assigned),
+                '--input_path', str(parsed),
                 '--output_path', str(fixed),
                 '--chain_list', 'B',
                 '--position_list', ' '.join([str(x) for x in fixed_indices]),
@@ -78,16 +78,10 @@ class ProteinMPNN(InverseFolding):
                  pdb_path: Path,
                  output_path: Path,
                  remodel_positions: list[int]):
-        input_path = Path(input_path)
-        pdb_path = Path(pdb_path)
-        output_path = Path(output_path)
-        
-        input_path.mkdir(exist_ok=True, parents=True)
-        output_path.mkdir(exist_ok=True, parents=True)
-        
         jsonls = [input_path / fi for fi in self.file_intermediates]
         self.prepare(pdb_path, *jsonls, remodel_positions)
         self.run(jsonls, output_path)
+
         return self.postprocessing(output_path)
 
     def run(self,
@@ -103,7 +97,7 @@ class ProteinMPNN(InverseFolding):
             '--sampling_temp', self.sampling_temp,
             '--batch_size', str(self.batch_size),
             '--model_name', self.model_name,
-            '--path_to_model_weights', self.model_weights,
+            '--path_to_model_weights', str(self.model_weights),
             '--device', self.device,
         ]
         

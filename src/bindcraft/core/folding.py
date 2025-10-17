@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from chai_lab.chai1 import run_inference
 import gemmi
 from pathlib import Path
-import shutil
 from string import Template
+import tempfile
 
 class Folding(ABC):
     def __init__(self):
@@ -24,9 +24,12 @@ class Folding(ABC):
 class Chai(Folding):
     def __init__(self,
                  fasta_dir: Path,
-                 out: Path):
+                 out: Path,
+                 device: str='xpu:0'):
         self.fasta_dir = Path(fasta_dir)
         self.out = Path(out)
+        self.device = device
+
         self.devshm = Path('/dev/shm')
         self.template_fasta = Template('>protein|target\n$target\n>protein|binder\n$binder')
         
@@ -45,18 +48,24 @@ class Chai(Folding):
                  seqs: list[str],
                  exp_label: str,
                  out_label: str) -> Path:
-        fasta = self.prepare(seqs, exp_label)
+        fasta = self.prepare(seqs, f'{exp_label}_{out_label}')
         out = self.devshm / exp_label
         out.mkdir(exist_ok=True, parents=True)
 
-        run_inference(
-            fasta_file=str(fasta),
-            output_dir=str(out),
-            device='xpu:0',
-            use_esm_embeddings=True,
-        )
+        print(fasta)
+        
+        with tempfile.TemporaryDirectory(dir=str(out)) as tmpdir:
+            tmp = Path(tmpdir)
+            run_inference(
+                fasta_file=fasta,
+                output_dir=tmp,
+                device=self.device,
+                use_esm_embeddings=True,
+            )
 
-        return self.postprocess(out, out_label)
+            pdb = self.postprocess(tmp, out_label)
+
+        return pdb
 
     def postprocess(self,
                     in_path: Path,
@@ -67,7 +76,6 @@ class Chai(Folding):
         structure = gemmi.read_structure(str(best_model))
         structure.write_pdb(str(final_path))
 
-        shutil.rmtree(str(in_path))
         return final_path
 
 class Boltz(Folding):

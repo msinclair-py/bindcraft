@@ -1,0 +1,422 @@
+Metadata-Version: 2.4
+Name: bindcraft
+Version: 0.1.0
+Summary: A flexible abstracted version of BindCraft (https://github.com/martinpacesa/BindCraft)
+Author-email: Matt Sinclair <msinclair@anl.gov>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/msinclair-py/bindcraft
+Project-URL: Issues, https://github.com/msinclair-py/bindcraft/issues
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+
+# BindCraft: One-shot Design of Functional Protein Binders
+
+A Python implementation of the BindCraft pipeline for de novo protein binder design using AlphaFold2 and ProteinMPNN.
+
+## Overview
+
+BindCraft is an automated pipeline that leverages deep learning models to design protein binders with nanomolar affinity. The pipeline uses:
+
+- **AlphaFold2/Chai-1**: For structure prediction and co-folding
+- **ProteinMPNN**: For inverse folding and sequence design
+- **Quality Control**: Automated filtering of designed sequences
+- **Energy Calculation**: Evaluation of binding interfaces
+
+## Pipeline Architecture
+
+```
+┌─────────────┐
+│   Target    │
+│  Protein    │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────┐
+│  1. Initial Co-Folding (Chai/AF2)  │
+│     - Predict binding interface     │
+│     - Identify interface residues   │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  2. Inverse Folding (ProteinMPNN)  │
+│     - Generate new sequences        │
+│     - Preserve interface residues   │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  3. Quality Control Filtering       │
+│     - Check sequence properties     │
+│     - Filter problematic motifs     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  4. Co-Folding New Designs          │
+│     - Predict new complexes         │
+│     - Calculate RMSD and energy     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  5. Iterate (Repeat steps 2-4)      │
+└─────────────────────────────────────┘
+```
+
+## Installation
+
+### Requirements
+
+```bash
+# Core dependencies
+pip install numpy MDAnalysis dill
+
+# For Chai-1 folding (recommended)
+pip install chai-lab
+
+# For analysis
+pip install matplotlib
+```
+
+### External Tools
+
+1. **ProteinMPNN**: Clone and install from [GitHub](https://github.com/dauparas/ProteinMPNN)
+   ```bash
+   git clone https://github.com/dauparas/ProteinMPNN.git
+   cd ProteinMPNN
+   # Follow installation instructions
+   ```
+
+## Project Structure
+
+```
+bindcraft/
+├── bindcraft.py              # Main pipeline class
+├── folding.py                # Folding algorithms (Chai, Boltz)
+├── inverse_folding.py        # Inverse folding (ProteinMPNN, ESM-IF1)
+├── energy.py                 # Energy calculation methods
+├── quality_control.py        # Sequence QC filters
+├── run_bindcraft.py          # Main execution script
+└── analysis.py               # Analysis and visualization tools
+```
+
+## Usage
+
+### Basic Usage
+
+```bash
+python run_bindcraft.py \
+    --target "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEK" \
+    --binder "MKQHKAMIVALIVICITAVVAALVTRKDLCEVHIRTGQTEVAVF" \
+    --proteinmpnn_path /path/to/ProteinMPNN \
+    --work_dir ./my_design \
+    --n_rounds 3 \
+    --n_seqs 100
+```
+
+### Advanced Options
+
+```bash
+python run_bindcraft.py \
+    --target <target_sequence> \
+    --binder <initial_binder_sequence> \
+    --proteinmpnn_path /path/to/ProteinMPNN \
+    --work_dir ./output \
+    --n_rounds 5 \
+    --n_seqs 200 \
+    --temp 0.15 \
+    --cutoff 5.0 \
+    --max_hydrophobic 0.5 \
+    --max_charge 6 \
+    --checkpoint my_checkpoint.pkl \
+    --restart  # Resume from checkpoint
+```
+
+### Parameters
+
+- `--target`: Target protein sequence (required)
+- `--binder`: Initial binder sequence (required)
+- `--proteinmpnn_path`: Path to ProteinMPNN installation (required)
+- `--work_dir`: Working directory (default: current directory)
+- `--n_rounds`: Number of design iterations (default: 3)
+- `--n_seqs`: Sequences generated per round (default: 100)
+- `--temp`: ProteinMPNN sampling temperature (default: 0.1)
+- `--cutoff`: Interface distance cutoff in Å (default: 5.0)
+- `--max_hydrophobic`: Max hydrophobic residue ratio (default: 0.4)
+- `--max_charge`: Maximum net charge (default: 5)
+- `--checkpoint`: Checkpoint file name (default: checkpoint.pkl)
+- `--restart`: Resume from checkpoint file
+
+## Programmatic Usage
+
+```python
+from pathlib import Path
+from bindcraft import BindCraft
+from folding import Chai
+from inverse_folding import ProteinMPNN
+from energy import SimpleEnergy
+from quality_control import SequenceQualityControl
+
+# Initialize components
+fold_alg = Chai(
+    fasta_dir=Path('fastas'),
+    out=Path('folds')
+)
+
+inv_fold_alg = ProteinMPNN(
+    proteinmpnn_path=Path('/path/to/ProteinMPNN'),
+    num_seq=100,
+    sampling_temp='0.1'
+)
+
+energy_alg = SimpleEnergy()
+qc_filter = SequenceQualityControl(max_hydrophobic_ratio=0.4)
+
+# Create pipeline
+pipeline = BindCraft(
+    target="MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEK",
+    binder="MKQHKAMIVALIVICITAVVAALVTRKDLCEVHIRTGQTEVAVF",
+    fold_alg=fold_alg,
+    inv_fold_alg=inv_fold_alg,
+    energy_alg=energy_alg,
+    qc_filter=qc_filter,
+    n_rounds=3,
+    cutoff=5.0
+)
+
+# Run design
+results = pipeline.run_inference()
+
+# Analyze results
+for binder_id, data in results.items():
+    print(f"Binder {binder_id}:")
+    print(f"  Sequence: {data['sequence']}")
+    print(f"  RMSD: {data['rmsd']:.2f} Å")
+    print(f"  Energy: {data['energy']:.2f}")
+```
+
+## Quality Control
+
+The pipeline includes comprehensive sequence quality control:
+
+- **Multiplicity**: Limits frequency of any single amino acid
+- **Diversity**: Ensures minimum number of unique amino acid types
+- **Repeats**: Prevents long stretches of identical residues
+- **Charge**: Controls net charge and charged residue ratio
+- **Hydrophobicity**: Limits hydrophobic residue content
+- **Motifs**: Filters problematic sequence patterns (RK, DP, DG, DS)
+- **Termini**: Avoids problematic N-terminal residues (Q, N)
+
+### Customizing QC Filters
+
+```python
+from quality_control import SequenceQualityControl
+
+qc = SequenceQualityControl(
+    max_repeat=4,                    # Max consecutive identical residues
+    max_appearance_ratio=0.33,       # Max frequency of single amino acid
+    max_charge=5,                    # Max net charge
+    max_charge_ratio=0.5,            # Max ratio of charged residues
+    max_hydrophobic_ratio=0.4,       # Max ratio of hydrophobic residues
+    min_diversity=8,                 # Min unique amino acid types
+    bad_motifs=['RK', 'DP', 'DG'],  # Problematic sequence motifs
+    bad_n_termini=['Q', 'N']        # Problematic N-terminal residues
+)
+```
+
+## Analysis Tools
+
+Generate comprehensive analysis reports:
+
+```bash
+python analysis.py checkpoint.pkl
+```
+
+This creates:
+- `energy_vs_rmsd.png`: Scatter plot of energy vs RMSD
+- `sequence_logo.png`: Sequence conservation visualization
+- `analysis_report.txt`: Statistical summary
+
+### Programmatic Analysis
+
+```python
+from analysis import (
+    load_checkpoint,
+    analyze_sequence_diversity,
+    analyze_energies,
+    plot_energy_vs_rmsd,
+    generate_report
+)
+
+# Load results
+structures = load_checkpoint('checkpoint.pkl')
+
+# Analyze diversity
+diversity = analyze_sequence_diversity(structures)
+print(f"Mean sequence identity: {diversity['mean_identity']:.2%}")
+
+# Analyze energies
+energy_stats = analyze_energies(structures)
+print(f"Best energy: {energy_stats['min_energy']:.2f}")
+
+# Generate plots
+plot_energy_vs_rmsd(structures, output_file='my_plot.png')
+
+# Full report
+generate_report('checkpoint.pkl', output_dir='my_analysis')
+```
+
+## Output Files
+
+### Directory Structure
+
+```
+work_dir/
+├── fastas/                    # Input fasta files
+│   ├── trial_0_seq_0.fa
+│   └── ...
+├── folds/                     # Predicted structures
+│   ├── pred.model_idx_0.cif
+│   └── ...
+├── inverse_folds/            # Inverse folding outputs
+│   ├── trial_0/
+│   │   ├── parsed_pdbs.jsonl
+│   │   ├── chain_B_design.jsonl
+│   │   └── seqs/
+│   └── ...
+├── analysis/                 # Analysis outputs
+│   ├── design_summary.txt
+│   ├── analysis_report.txt
+│   ├── energy_vs_rmsd.png
+│   └── sequence_logo.png
+└── checkpoint.pkl           # Pipeline checkpoint
+```
+
+### Checkpoint Format
+
+The checkpoint file contains a dictionary:
+
+```python
+{
+    'initial_guess': {
+        'sequence': str,      # Binder sequence
+        'structure': str,     # Path to structure file
+        'rmsd': float,        # RMSD to reference (Å)
+        'energy': float       # Calculated energy
+    },
+    1: { ... },              # Subsequent designs
+    2: { ... },
+    ...
+}
+```
+
+## Extending the Pipeline
+
+### Adding New Folding Algorithms
+
+```python
+from folding import Folding
+from pathlib import Path
+
+class MyFolder(Folding):
+    def __init__(self, **kwargs):
+        # Initialize your folding method
+        pass
+    
+    def prepare(self, seqs: list[str], label: str) -> Path:
+        # Prepare inputs
+        pass
+    
+    def __call__(self, seqs: list[str], label: str) -> Path:
+        # Run folding and return structure path
+        pass
+    
+    def postprocess(self, in_path: Path) -> Path:
+        # Clean up and return final structure
+        pass
+```
+
+### Adding New Inverse Folding Methods
+
+```python
+from inverse_folding import InverseFolding
+
+class MyInverseFolder(InverseFolding):
+    def prepare(self, pdb_path: Path, file1: Path, file2: Path):
+        # Prepare PDB files
+        pass
+    
+    def __call__(self, input_path, pdb_path, output_path, remodel):
+        # Generate sequences
+        return list_of_sequences
+    
+    def postprocessing(self, output_dir: Path) -> list[str]:
+        # Extract and return sequences
+        pass
+```
+
+### Custom Energy Functions
+
+```python
+from energy import EnergyCalculation
+from pathlib import Path
+
+class MyEnergy(EnergyCalculation):
+    def __call__(self, structure: Path) -> float:
+        # Calculate and return energy score
+        return energy_value
+```
+
+## Tips for Success
+
+1. **Initial Binder**: Use a reasonable starting sequence (50-100 residues)
+2. **Interface Cutoff**: Adjust `--cutoff` based on binding site geometry (3-6 Å typical)
+3. **Temperature**: Lower temps (0.1) = conservative, higher (0.3) = diverse
+4. **Number of Rounds**: Start with 3-5 rounds for most targets
+5. **Checkpointing**: Use `--restart` to resume interrupted runs
+6. **Quality Control**: Adjust thresholds based on target requirements
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue**: "No sequences pass QC"
+- **Solution**: Relax QC parameters (`--max_hydrophobic`, `--max_charge`)
+
+**Issue**: "Out of memory during folding"
+- **Solution**: Reduce binder length or batch size
+
+**Issue**: "ProteinMPNN not found"
+- **Solution**: Check `--proteinmpnn_path` points to correct directory
+
+**Issue**: "High RMSD values"
+- **Solution**: Increase `--n_rounds` or adjust interface `--cutoff`
+
+## Citation
+
+Based on the paper:
+```
+Pacesa, M., Nickel, L., Schellhaas, C., et al. (2025). 
+One-shot design of functional protein binders with BindCraft. 
+Nature, 631, 449-458.
+```
+
+## License
+
+This implementation is provided for research purposes. Please cite the original paper if you use this code.
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## Support
+
+For questions or issues:
+- Check the troubleshooting section
+- Review the original paper for methodology details
+- Open an issue with detailed error messages and system info# bindcraft

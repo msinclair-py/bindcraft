@@ -46,15 +46,19 @@ def main():
     parser.add_argument('--n_rounds', type=int, default=3,
                        help='Number of design rounds (default: 3)')
     parser.add_argument('--n_seqs', type=int, default=1000,
-                       help='Number of sequences per round (default: 100)')
+                        help='Number of sequences per round (default: 1000)')
     parser.add_argument('--temp', type=str, default='0.1',
                        help='ProteinMPNN sampling temperature (default: 0.1)')
-    parser.add_argument('--cutoff', type=float, default=4.0,
-                       help='Interface distance cutoff in Å (default: 5.0)')
+    parser.add_argument('--dist_cutoff', type=float, default=4.0,
+                       help='Interface distance cutoff in Å (default: 4.0)')
+    parser.add_argument('--rmsd_cutoff', type=float, default=5.0,
+                       help='Binder RMSD cutoff in Å (default: 5.0)')
+    parser.add_argument('--energy_cutoff', type=float, default=-50.0,
+                        help='Cutoff for binder to target interaction energy in kcal/mol (default: -50.0)')
     
     # Quality control parameters
     parser.add_argument('--max_hydrophobic', type=float, default=0.6,
-                       help='Maximum hydrophobic ratio (default: 0.4)')
+                       help='Maximum hydrophobic ratio (default: 0.6)')
     parser.add_argument('--max_charge', type=int, default=5,
                        help='Maximum net charge (default: 5)')
     
@@ -102,7 +106,9 @@ def main():
         qc_filter=qc_filter,
         chk_file=str(args.work_dir / args.checkpoint),
         n_rounds=args.n_rounds,
-        cutoff=args.cutoff
+        dist_cutoff=args.dist_cutoff,
+        rmsd_cutoff=args.rmsd_cutoff,
+        energy_cutoff=args.energy_cutoff,
     )
     
     print("="*60)

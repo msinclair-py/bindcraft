@@ -1,1 +1,1 @@
-from quality_control import SequenceQualityControl
+from .quality_control import SequenceQualityControl
