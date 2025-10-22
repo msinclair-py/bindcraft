@@ -49,6 +49,8 @@ def main():
                         help='Number of sequences per round (default: 1000)')
     parser.add_argument('--temp', type=str, default='0.1',
                        help='ProteinMPNN sampling temperature (default: 0.1)')
+    parser.add_argument('--batch_size', type=int, default=250,
+                        help='ProteinMPNN batch size (default: 250)')
     parser.add_argument('--dist_cutoff', type=float, default=4.0,
                        help='Interface distance cutoff in Å (default: 4.0)')
     parser.add_argument('--rmsd_cutoff', type=float, default=5.0,
@@ -95,7 +97,7 @@ def main():
         proteinmpnn_path=args.proteinmpnn_path,
         num_seq=args.n_seqs,
         sampling_temp=args.temp,
-        batch_size=250
+        batch_size=args.batch_size
     )
     
     # Initialize energy calculation
@@ -109,6 +111,7 @@ def main():
     
     # Initialize BindCraft
     bindcraft = BindCraft(
+        cwd=work_dir,
         target=args.target,
         binder=args.binder,
         fold_alg=fold_alg,

@@ -12,6 +12,7 @@ from ..util.quality_control import SequenceQualityControl
 
 class BindCraft:
     def __init__(self,
+                 cwd: Path,
                  target: str,
                  binder: str,
                  fold_alg: Folding,
@@ -24,6 +25,7 @@ class BindCraft:
                  rmsd_cutoff: float = 5.0,
                  energy_cutoff: float = -50.0,
                  **kwargs):
+        self.cwd = cwd
         self.target = target
         self.binder = binder
         self.fold = fold_alg
@@ -44,8 +46,8 @@ class BindCraft:
         self.seq_label = Template('seq_$seq')
         self.trial = 1
 
-        self.ff_path = Path('folds')
-        self.if_path = Path('inverse_folds')
+        self.ff_path = self.cwd / 'folds'
+        self.if_path = self.cwd / 'inverse_folds'
 
         if self.chk_file.exists():
             self.restart_run()
@@ -79,7 +81,7 @@ class BindCraft:
         if not hasattr(self, 'structures'):
             self.fold.out = self.fold.out / label
             self.fold.out.mkdir(exist_ok=True)
-            Path(f'inverse_folds/{label}').mkdir(exist_ok=True)
+            (self.if_path / label).mkdir(exist_ok=True)
 
             structure = self.fold([self.target, self.binder], label, seq_label)
             
@@ -113,23 +115,25 @@ class BindCraft:
         Returns:
             (dict[str, dict]): 
         """
-        fasta_in = Path('inverse_folds') / f'trial_{self.trial-1}'
-        fasta_out = Path('inverse_folds') / f'trial_{self.trial}'
-        structure_out = Path('folds') / f'trial_{self.trial}'
+        fasta_in = self.if_path / f'trial_{self.trial-1}'
+        fasta_out = self.if_path / f'trial_{self.trial}'
+        structure_out = self.ff_path / f'trial_{self.trial}'
         
         fasta_out.mkdir(exist_ok=True, parents=True)
         structure_out.mkdir(exist_ok=True, parents=True)
 
         self.fold.out = structure_out
-
-        inverse_fold_seqs = self.inv_fold(
-            fasta_in,       # input_path (Path)
-            pdbs,           # pdb_path (Path)
-            fasta_out,      # output_path (Path)
-            self.remodel    # indices (list[int])
-        )
         
-        filtered_seqs = [seq for seq in inverse_fold_seqs if self.qc(seq)]
+        filtered_seqs = []
+        while len(filtered_seqs) <= self.inv_fold.num_seqs:
+            inverse_fold_seqs = self.inv_fold(
+                fasta_in,       # input_path (Path)
+                pdbs,           # pdb_path (Path)
+                fasta_out,      # output_path (Path)
+                self.remodel    # indices (list[int])
+            )
+        
+            filtered_seqs += [seq for seq in inverse_fold_seqs if self.qc(seq)]
         
         structures = {self.trial: {bnum: {} for bnum in range(len(filtered_seqs))}}
         bnum = 0
@@ -161,7 +165,7 @@ class BindCraft:
         these metrics for further development.
         """
         current_trial = self.label.substitute(trial=max(structures.keys()))
-        fail_path = Path('folds') / f'failed_{current_trial}'
+        fail_path = self.ff_path / f'failed_{current_trial}'
         fail_path.mkdir(exist_ok=True)
 
         for value in structures.values():
