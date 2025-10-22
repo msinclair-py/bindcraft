@@ -168,7 +168,7 @@ class BindCraft:
         fail_path = self.ff_path / f'failed_{current_trial}'
         fail_path.mkdir(exist_ok=True)
 
-        for value in structures.values():
+        for value in structures[current_trial].values():
             structure = Path(value['structure'])
             coords = self.get_binder_coords(structure)
             rmsd_value = rmsd(coords, self.reference)
