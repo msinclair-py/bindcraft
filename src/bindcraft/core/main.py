@@ -84,7 +84,7 @@ class BindCraft:
             (self.if_path / label).mkdir(exist_ok=True)
 
             structure = self.fold([self.target, self.binder], label, seq_label)
-            
+            print(f"prepare structure = {structure}")
             energy = self.measure_energy(structure)
 
             self.structures = {
@@ -95,9 +95,11 @@ class BindCraft:
                     'energy': energy
                 }
             }
+            print(f"prepare dict = {self.structures}")
         else:
             structure = str(self.ff_path / label / f'{seq_label}.pdb')
-        
+            print(f"prepare restart: {structure}") 
+            print("Does not need to reinitialize self.structures")
         self.reference = self.get_binder_coords(structure)
         self.remodel = self.get_interface(structure)
 
@@ -134,7 +136,7 @@ class BindCraft:
             )
         
             filtered_seqs += [seq for seq in inverse_fold_seqs if self.qc(seq)]
-        
+            print(len(filtered_seqs)) 
         structures = {self.trial: {bnum: {} for bnum in range(len(filtered_seqs))}}
         bnum = 0
         for i, seq in enumerate(filtered_seqs):
@@ -168,13 +170,13 @@ class BindCraft:
         fail_path = self.ff_path / f'failed_{current_trial}'
         fail_path.mkdir(exist_ok=True)
 
-        for value in structures.values():
+        for key, value in structures[current_trial].items():
             structure = Path(value['structure'])
             coords = self.get_binder_coords(structure)
             rmsd_value = rmsd(coords, self.reference)
             energy = self.measure_energy(structure)
-            value['rmsd'] = rmsd_value
-            value['energy'] = energy
+            structures[key]['rmsd'] = rmsd_value
+            structures[key]['energy'] = energy
 
             if rmsd_value > self.rmsd_cutoff or energy > self.energy_cutoff:
                 moved = fail_path / structure.name

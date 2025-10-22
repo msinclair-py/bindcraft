@@ -8,9 +8,9 @@ src/bindcraft.egg-info/top_level.txt
 src/bindcraft/analysis/__init__.py
 src/bindcraft/analysis/energy.py
 src/bindcraft/core/__init__.py
-src/bindcraft/core/bindcraft.py
 src/bindcraft/core/folding.py
 src/bindcraft/core/inverse_folding.py
+src/bindcraft/core/main.py
 src/bindcraft/util/__init__.py
 src/bindcraft/util/quality_control.py
 tests/test_bindcraft.py
