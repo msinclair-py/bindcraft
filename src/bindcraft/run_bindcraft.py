@@ -67,11 +67,22 @@ def main():
                        help='Checkpoint file name (default: checkpoint.pkl)')
     parser.add_argument('--restart', action='store_true',
                        help='Restart from checkpoint')
+    parser.add_argument('--mpi', action='store_true',
+                        help='Whether or not we are parallelizing with MPI')
     
     args = parser.parse_args()
     
     # Setup directories
-    dirs = setup_directories(args.work_dir)
+    if args.mpi:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        work_dir = Path(args.work_dir) / f'rank{rank}'
+    else:
+        work_dir = Path(args.work_dir)
+
+    dirs = setup_directories(work_dir)
     
     # Initialize folding algorithm
     fold_alg = Chai(
