@@ -3,6 +3,7 @@ import MDAnalysis as mda
 from MDAnalysis.analysis.rms import rmsd
 import numpy as np
 from pathlib import Path
+from rust_simulation_tools import kabsch_align
 from string import Template
 from typing import Any, Union
 from .folding import Folding
@@ -65,6 +66,7 @@ class BindCraft:
         self.prepare()
 
         for _ in range(self.n_rounds):
+            print(current_pdbs)
             new_structures = self.cycle(current_pdbs)
             current_pdbs = self.appraise(new_structures)
             self.checkpoint()
@@ -88,20 +90,21 @@ class BindCraft:
             energy = self.measure_energy(structure)
 
             self.structures = {
-                '0': {
-                    'sequence': self.binder, 
-                    'structure': str(structure), 
-                    'rmsd': 0.0, 
-                    'energy': energy
+                0: {
+                    0: {
+                        'sequence': self.binder, 
+                        'structure': str(structure), 
+                        'tref_rmsd': 0.0, 
+                        'bref_rmsd': 0.0,
+                        'energy': energy
+                    }
                 }
             }
-
-            self.structures = {}
 
         else:
             structure = str(self.ff_path / label / f'{seq_label}.pdb')
         
-        self.reference = self.get_binder_coords(structure)
+        self.get_reference_coords(structure)
         self.remodel = self.get_interface(structure)
 
     def cycle(self,
@@ -136,15 +139,8 @@ class BindCraft:
         filtered_seqs = []
         current_fasta = ''
         i = 0
-        while len(filtered_seqs) <= n_seqs or i < self.inv_fold.max_retries:
-            # back up fasta files so we have an external ledger of seqs for DPO
-            if i == 1:
-                fa = list((fasta_out / 'seqs').glob('*.fa'))[0]
-                current_fasta = fa.name
-
-            if i > 0:
-                assert (fa).exists(), 'Inverse folding failed to produce a fasta for {label}:{i}!'
-                fa.rename(fasta_out / f'{i-1}.{current_fasta}')
+        while len(filtered_seqs) < n_seqs and i < self.inv_fold.max_retries:
+            print(f'{len(filtered_seqs)} quality sequences!')
 
             inverse_fold_seqs = self.inv_fold(
                 fasta_in,       # input_path (Path)
@@ -156,21 +152,32 @@ class BindCraft:
             filtered_seqs += [seq for seq in inverse_fold_seqs if self.qc(seq)]
 
             i += 1
+                
+            if i == 1:
+                print(fasta_in)
+                print(fasta_out)
+                print(list((fasta_out / 'seqs').glob('seq_*.fa')))
+                fa = list((fasta_out / 'seqs').glob('seq_*.fa'))[0]
+                current_fasta = fa.name
+
+            fa.rename(fasta_out / 'seqs' / f'{i-1}.{current_fasta}')
+
+        assert len(filtered_seqs) > 0, 'Inverse folding failed!'
         
-        structures = {bnum: {} for bnum in range(len(filtered_seqs))}
-        bnum = 0
-        for i, seq in enumerate(filtered_seqs):
+        max_fold = 4 if len(filtered_seqs) >= 4 else len(filtered_seqs)
+        #structures = {bnum: {} for bnum in range(len(filtered_seqs))}
+        structures = {bnum: {} for bnum in range(max_fold)}
+        for i, seq in enumerate(filtered_seqs[:max_fold]):
             seq_label = self.seq_label.substitute(seq=i)
             structure = self.fold([self.target, seq], label, seq_label)
             
-            structures[bnum] = {
+            structures[i] = {
                 'sequence': seq, 
                 'structure': str(structure), 
-                'rmsd': np.nan, 
+                'tref_rmsd': np.nan, 
+                'bref_rmsd': np.nan, 
                 'energy': np.nan
             }
-
-            bnum += 1
 
         return structures
 
@@ -180,7 +187,7 @@ class BindCraft:
         with open(self.chk_file, 'wb') as fout:
             pickle.dump(self.structures, fout)
 
-    def appraise(self, structures: dict[str, Any]) -> list[Path]:
+    def appraise(self, structures: dict[str, Any]) -> Path:
         """Performs structural appraisal in the form of RMSD relative to the
         parent binder conformation and binder to target interaction energy.
         Stores all measurements but returns list of only the PDBs which pass 
@@ -189,37 +196,50 @@ class BindCraft:
         current_trial = self.label.substitute(trial=self.trial)
         fail_path = self.ff_path / f'failed_{current_trial}'
         fail_path.mkdir(exist_ok=True)
-
+        
         for key, val in structures.items():
             structure = Path(val['structure'])
-            coords = self.get_binder_coords(structure)
-            rmsd_value = rmsd(coords, self.reference)
+            coords = self.get_coords(structure)
+            
+            #align = np.squeeze(kabsch_align(coords[np.newaxis, :, :], self.ref_pos, self.target_idx))
+            #displacement_rmsd = rmsd(align[self.binder_idx], self.ref_pos[self.binder_idx])
+            
+            align = np.squeeze(kabsch_align(coords[np.newaxis, :, :], self.ref_pos, self.binder_idx))
+            binder_rmsd = rmsd(align[self.binder_idx], self.ref_pos[self.binder_idx])
             energy = self.measure_energy(structure)
-            val['rmsd'] = rmsd_value
+            #val['tref_rmsd'] = displacement_rmsd
+            val['tref_rmsd'] = np.nan
+            val['bref_rmsd'] = binder_rmsd
             val['energy'] = energy
 
             print(val)
-            if rmsd_value > self.rmsd_cutoff or energy > self.energy_cutoff:
+            if energy > self.energy_cutoff:
+            #if displacement_rmsd > self.rmsd_cutoff or energy > self.energy_cutoff:
                 moved = fail_path / structure.name
                 structure.rename(moved)
                 structure = moved
         
+        print(structures)
         self.structures[self.trial] = structures
+
+        return self.ff_path / current_trial
 
     def measure_energy(self, structure: Path) -> float:
         return self.energy(structure)
 
-    def get_binder_coords(self, pdbs: Union[list[Path], Path]) -> np.ndarray:
-        if not isinstance(pdbs, list):
-            pdbs = [pdbs]
+    def get_reference_coords(self, pdb: Path) -> None:
+        u = mda.Universe(str(pdb))
+        self.ref_pos = u.select_atoms('name CA').positions.astype(np.float32)
+        self.target_idx = np.array(
+            [i for i in range(len(u.select_atoms('name CA and chainID A')))], dtype=np.int32
+        )
+        self.binder_idx = np.array(
+            [i for i in range(self.ref_pos.shape[0]) if i not in self.target_idx], dtype=np.int32
+        )
 
-        coords = np.zeros((len(pdbs), len(self.binder), 3))
-        for i, pdb in enumerate(pdbs):
-            u = mda.Universe(str(pdb))
-            coords[i, :, :] = u.select_atoms('name CA and chainID B').positions
-            del u
-        
-        return coords.squeeze()
+    def get_coords(self, pdb: Path) -> np.ndarray:
+        u = mda.Universe(str(pdb))
+        return u.select_atoms('name CA').positions.astype(np.float32)
 
     def get_interface(self, pdb: Path) -> None:
         u = mda.Universe(str(pdb))

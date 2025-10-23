@@ -53,6 +53,8 @@ def main():
                         help='ProteinMPNN batch size (default: 250)')
     parser.add_argument('--max_retries', type=int, default=5,
                         help='Maximum number of retries to hit `n_seqs` quality sequences (default: 5)')
+    parser.add_argument('--diff_steps', type=int, default=100,
+                        help='Number of diffusion steps for folding (default: 100)')
     parser.add_argument('--dist_cutoff', type=float, default=4.0,
                        help='Interface distance cutoff in Å (default: 4.0)')
     parser.add_argument('--rmsd_cutoff', type=float, default=5.0,
@@ -91,7 +93,8 @@ def main():
     # Initialize folding algorithm
     fold_alg = Chai(
         fasta_dir=dirs['fastas'],
-        out=dirs['folds']
+        out=dirs['folds'],
+        diffusion_steps=args.diff_steps
     )
     
     # Initialize inverse folding algorithm
@@ -140,7 +143,8 @@ def main():
     
     # Run the pipeline
     try:
-        results = bindcraft.run_inference()
+        bindcraft.run_inference()
+        results = bindcraft.structures
         
         print("\n" + "="*60)
         print("Design completed successfully!")
