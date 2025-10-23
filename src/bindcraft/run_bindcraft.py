@@ -51,6 +51,8 @@ def main():
                        help='ProteinMPNN sampling temperature (default: 0.1)')
     parser.add_argument('--batch_size', type=int, default=250,
                         help='ProteinMPNN batch size (default: 250)')
+    parser.add_argument('--max_retries', type=int, default=5,
+                        help='Maximum number of retries to hit `n_seqs` quality sequences (default: 5)')
     parser.add_argument('--dist_cutoff', type=float, default=4.0,
                        help='Interface distance cutoff in Å (default: 4.0)')
     parser.add_argument('--rmsd_cutoff', type=float, default=5.0,
@@ -96,6 +98,7 @@ def main():
     inv_fold_alg = ProteinMPNN(
         proteinmpnn_path=args.proteinmpnn_path,
         num_seq=args.n_seqs,
+        max_retries=args.max_retries,
         sampling_temp=args.temp,
         batch_size=args.batch_size
     )

@@ -23,6 +23,7 @@ class ProteinMPNN(InverseFolding):
     def __init__(self,
                  proteinmpnn_path: Path,
                  num_seq: int = 1,
+                 max_retries: int=5,
                  sampling_temp: str = '0.1',
                  batch_size: int = 250,
                  model_name: str = 'v_48_020',
@@ -36,6 +37,7 @@ class ProteinMPNN(InverseFolding):
             self.proteinmpnn_path / 'helper_scripts' / 'make_fixed_positions_dict.py'
         ]
         self.num_seq = num_seq
+        self.max_retries = max_retries
         self.sampling_temp = sampling_temp
         self.batch_size = batch_size
         self.model_name = model_name

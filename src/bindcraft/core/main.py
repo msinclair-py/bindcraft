@@ -95,6 +95,9 @@ class BindCraft:
                     'energy': energy
                 }
             }
+
+            self.structures = {}
+
         else:
             structure = str(self.ff_path / label / f'{seq_label}.pdb')
         
@@ -115,17 +118,34 @@ class BindCraft:
         Returns:
             (dict[str, dict]): 
         """
-        fasta_in = self.if_path / f'trial_{self.trial-1}'
-        fasta_out = self.if_path / f'trial_{self.trial}'
-        structure_out = self.ff_path / f'trial_{self.trial}'
+        label = self.label.substitute(trial=self.trial)
+        last_label = self.label.substitute(trial=self.trial - 1)
+
+        fasta_in = self.if_path / last_label
+        fasta_out = self.if_path / label
+        structure_out = self.ff_path / label
         
         fasta_out.mkdir(exist_ok=True, parents=True)
         structure_out.mkdir(exist_ok=True, parents=True)
 
         self.fold.out = structure_out
         
+        # scale number of seqs by number of pdbs
+        n_pdbs = len(list((self.ff_path / last_label).glob('*.pdb')))
+        n_seqs = self.inv_fold.num_seq * n_pdbs
         filtered_seqs = []
-        while len(filtered_seqs) <= self.inv_fold.num_seqs:
+        current_fasta = ''
+        i = 0
+        while len(filtered_seqs) <= n_seqs or i < self.inv_fold.max_retries:
+            # back up fasta files so we have an external ledger of seqs for DPO
+            if i == 1:
+                fa = list((fasta_out / 'seqs').glob('*.fa'))[0]
+                current_fasta = fa.name
+
+            if i > 0:
+                assert (fa).exists(), 'Inverse folding failed to produce a fasta for {label}:{i}!'
+                fa.rename(fasta_out / f'{i-1}.{current_fasta}')
+
             inverse_fold_seqs = self.inv_fold(
                 fasta_in,       # input_path (Path)
                 pdbs,           # pdb_path (Path)
@@ -134,20 +154,22 @@ class BindCraft:
             )
         
             filtered_seqs += [seq for seq in inverse_fold_seqs if self.qc(seq)]
+
+            i += 1
         
-        structures = {self.trial: {bnum: {} for bnum in range(len(filtered_seqs))}}
+        structures = {bnum: {} for bnum in range(len(filtered_seqs))}
         bnum = 0
         for i, seq in enumerate(filtered_seqs):
-            label = self.label.substitute(trial=self.trial)
             seq_label = self.seq_label.substitute(seq=i)
             structure = self.fold([self.target, seq], label, seq_label)
             
-            structures[self.trial][bnum] = {
+            structures[bnum] = {
                 'sequence': seq, 
                 'structure': str(structure), 
                 'rmsd': np.nan, 
                 'energy': np.nan
             }
+
             bnum += 1
 
         return structures
@@ -164,24 +186,25 @@ class BindCraft:
         Stores all measurements but returns list of only the PDBs which pass 
         these metrics for further development.
         """
-        current_trial = self.label.substitute(trial=max(structures.keys()))
+        current_trial = self.label.substitute(trial=self.trial)
         fail_path = self.ff_path / f'failed_{current_trial}'
         fail_path.mkdir(exist_ok=True)
 
-        for value in structures[current_trial].values():
-            structure = Path(value['structure'])
+        for key, val in structures.items():
+            structure = Path(val['structure'])
             coords = self.get_binder_coords(structure)
             rmsd_value = rmsd(coords, self.reference)
             energy = self.measure_energy(structure)
-            value['rmsd'] = rmsd_value
-            value['energy'] = energy
+            val['rmsd'] = rmsd_value
+            val['energy'] = energy
 
+            print(val)
             if rmsd_value > self.rmsd_cutoff or energy > self.energy_cutoff:
                 moved = fail_path / structure.name
                 structure.rename(moved)
                 structure = moved
         
-        self.structures.update(structures)
+        self.structures[self.trial] = structures
 
     def measure_energy(self, structure: Path) -> float:
         return self.energy(structure)
