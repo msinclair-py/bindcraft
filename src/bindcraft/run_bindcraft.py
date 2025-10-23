@@ -144,8 +144,15 @@ def main():
     # Run the pipeline
     try:
         bindcraft.run_inference()
-        results = bindcraft.structures
-        
+        results = {}
+        for k1, v1 in bindcraft.structures.items():
+            if isinstance(v1, dict):
+                for k2, v2 in v1.items():
+                    results[f"{k1}-{k2}"] = v2
+            else:
+                # keep non-dict values from level 1 if you want
+                results[str(k1)] = v1
+
         print("\n" + "="*60)
         print("Design completed successfully!")
         print(f"Total structures generated: {len(results)}")
@@ -162,7 +169,7 @@ def main():
         for i, (binder_id, data) in enumerate(sorted_results[:5], 1):
             print(f"{i}. Binder {binder_id}")
             print(f"   Sequence: {data['sequence'][:50]}...")
-            print(f"   RMSD: {data['rmsd']:.2f} Å")
+            print(f"   RMSD: {data['bref_rmsd']:.2f} Å")
             print(f"   Energy: {data['energy']:.2f}")
             print(f"   Structure: {data['structure']}")
             print()
@@ -180,7 +187,7 @@ def main():
             for binder_id, data in sorted_results:
                 f.write(f"Binder {binder_id}\n")
                 f.write(f"  Sequence: {data['sequence']}\n")
-                f.write(f"  RMSD: {data['rmsd']:.2f}\n")
+                f.write(f"  RMSD: {data['bref_rmsd']:.2f}\n")
                 f.write(f"  Energy: {data['energy']:.2f}\n")
                 f.write(f"  Structure: {data['structure']}\n\n")
         
