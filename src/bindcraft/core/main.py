@@ -50,9 +50,6 @@ class BindCraft:
         self.ff_path = self.cwd / 'folds'
         self.if_path = self.cwd / 'inverse_folds'
 
-        if self.chk_file.exists():
-            self.restart_run()
-
     def run_inference(self):
         """Runs the main inference loop. First checks for a restart, then prepares
         all internal data objects and finally performs sampling, checkpointing after each
@@ -60,12 +57,14 @@ class BindCraft:
         """
         if self.chk_file.exists():
             current_pdbs = self.restart_run()
+            current_round = self.trial
         else:
             current_pdbs = str(self.ff_path / 'trial_0')
+            current_round = 0
 
         self.prepare()
 
-        for _ in range(self.n_rounds):
+        for _ in range(self.n_rounds - current_round):
             print(current_pdbs)
             new_structures = self.cycle(current_pdbs)
             current_pdbs = self.appraise(new_structures)
@@ -253,9 +252,4 @@ class BindCraft:
         
         self.trial = max(self.structures.keys())
         
-        passing_pdbs = []
-        for vals in self.structures[self.trial].values():
-            if vals['rmsd'] <= self.rmsd_cutoff and vals['energy'] <= self.energy_cutoff:
-                passing_pdbs.append(vals['structure'])
-
-        return passing_pdbs
+        return self.ff_path / self.label.substitute(trial=self.trial)
