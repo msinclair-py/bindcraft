@@ -23,10 +23,18 @@ from bindcraft.core.inverse_folding import ProteinMPNN
 from bindcraft.analysis.energy import SimpleEnergy
 from bindcraft.util.quality_control import SequenceQualityControl
 
-def set_gpu_for_process(gpu_id):
+def set_gpu_for_folding(gpu_id):
+    """Initializer for folding processes - uses 4 GPUs in round-robin."""
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    print(f"Set GPU for process to {gpu_id}")
+    print(f"Set GPU for folding process to {gpu_id}")
+    init_logging('INFO')
+
+def set_gpu_for_other_tasks(gpu_id):
+    """Initializer for inverse folding/analysis/QC processes - uses 1 GPU."""
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+    print(f"Set GPU for other tasks process to {gpu_id}")
     init_logging('INFO')
 
 
@@ -82,36 +90,58 @@ async def main():
     )
     with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
         mp_context = multiprocessing.get_context('spawn')
-        executor=ProcessPoolExecutor(
-                    max_workers = 5,
-                    initializer=set_gpu_for_process, initargs=(0,), #init_logging,
-                    mp_context=mp_context)
+
+        # Create separate executors for different task types
+        # Folding uses 4 GPUs (GPUs 0-3)
+        folding_executor = ProcessPoolExecutor(
+            max_workers=4,
+            initializer=set_gpu_for_folding,
+            initargs=(0,),  # GPU 0 for first worker, round-robin for others
+            mp_context=mp_context
+        )
+
+        # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
+        other_tasks_executor = ProcessPoolExecutor(
+            max_workers=3,
+            initializer=set_gpu_for_other_tasks,
+            initargs=(4,),  # GPU 4 for all other tasks
+            mp_context=mp_context
+        )
+
         async with await Manager.from_exchange_factory(
             factory=factory,
-            executors=executor,
+            executors={
+                'folding': folding_executor,
+                'other': other_tasks_executor,
+            },
         ) as manager:
             # Launch individual agents
             forward_folder = await manager.launch(
                 ForwardFoldingAgent,
-                args=(chai,)
+                args=(chai,),
+                executor='folding'
             )
             inverse_folder = await manager.launch(
                 InverseFoldingAgent,
-                args=(proteinmpnn,)
+                args=(proteinmpnn,),
+                executor='other'
             )
             qc_agent = await manager.launch(
                 QualityControlAgent,
-                args=(SequenceQualityControl(**qc_kwargs),)
+                args=(SequenceQualityControl(**qc_kwargs),),
+                executor='other'
             )
             analyzer = await manager.launch(
                 AnalysisAgent,
-                args=(SimpleEnergy(),)
+                args=(SimpleEnergy(),),
+                executor='other'
             )
 
             # Launch coordinator with handles to other agents
             coordinator = await manager.launch(
                 PeptideDesignCoordinator,
-                args=(forward_folder, inverse_folder, qc_agent, analyzer, nseqs, retries)
+                args=(forward_folder, inverse_folder, qc_agent, analyzer, nseqs, retries),
+                executor='other'
             )
 
             # Define sequences for design
