@@ -50,6 +50,14 @@ def set_gpu_for_other_tasks():
 
 
 EXCHANGE_PORT = 5346
+
+def setup_multiprocessing():
+    """Set up multiprocessing before anything else."""
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass  # Already set
+
 async def main():
     init_logging('INFO')
 
@@ -99,20 +107,21 @@ async def main():
         model_weights=mpnn_weights,
         device=device  # or 'cpu' if GPU not available
     )
-    with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
-        # Create separate executors for different task types
-        # spawn_http_exchange already handles multiprocessing context setup
-        # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
-        folding_executor = ProcessPoolExecutor(
-            max_workers=4,
-            initializer=set_gpu_for_folding
-        )
 
-        # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
-        other_tasks_executor = ProcessPoolExecutor(
-            max_workers=5,
-            initializer=set_gpu_for_other_tasks
-        )
+    # Create separate executors for different task types
+    # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
+    folding_executor = ProcessPoolExecutor(
+        max_workers=4,
+        initializer=set_gpu_for_folding
+    )
+
+    # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
+    other_tasks_executor = ProcessPoolExecutor(
+        max_workers=5,
+        initializer=set_gpu_for_other_tasks
+    )
+
+    with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
 
         async with await Manager.from_exchange_factory(
             factory=factory,
@@ -167,4 +176,5 @@ async def main():
             print(f"Workflow completed: {results}")
 
 if __name__ == '__main__':
+    setup_multiprocessing()
     asyncio.run(main())
