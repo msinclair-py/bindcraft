@@ -25,11 +25,15 @@ from bindcraft.util.quality_control import SequenceQualityControl
 
 # Global counter for assigning GPUs in round-robin fashion
 _folding_worker_counter = 0
-_folding_worker_lock = multiprocessing.Lock()
 
 def set_gpu_for_folding():
     """Initializer for folding processes - assigns GPUs 0-3 in round-robin."""
     import os
+
+    try:
+        _folding_worker_lock = multiprocessing.Lock()
+    except:
+        pass
     global _folding_worker_counter
 
     # Assign GPU based on worker count (round-robin across 0-3)
@@ -108,20 +112,23 @@ async def main():
         device=device  # or 'cpu' if GPU not available
     )
 
-    # Create separate executors for different task types
-    # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
-    folding_executor = ProcessPoolExecutor(
-        max_workers=4,
-        initializer=set_gpu_for_folding
-    )
-
-    # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
-    other_tasks_executor = ProcessPoolExecutor(
-        max_workers=5,
-        initializer=set_gpu_for_other_tasks
-    )
 
     with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
+        mp_context = multiprocessing.get_context('spawn')
+        # Create separate executors for different task types
+        # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
+        folding_executor = ProcessPoolExecutor(
+            max_workers=4,
+            initializer=set_gpu_for_folding,
+            mp_context=mp_context
+        )
+    
+        # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
+        other_tasks_executor = ProcessPoolExecutor(
+            max_workers=5,
+            initializer=set_gpu_for_other_tasks,
+            mp_context=mp_context
+        )
 
         async with await Manager.from_exchange_factory(
             factory=factory,
