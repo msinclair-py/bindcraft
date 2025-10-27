@@ -12,6 +12,7 @@ from bindcraft.core.agentic import (
     AnalysisAgent,
     PeptideDesignCoordinator,
 )
+
 from bindcraft.core.folding import Chai
 from bindcraft.core.inverse_folding import ProteinMPNN
 from bindcraft.analysis.energy import SimpleEnergy
@@ -33,18 +34,18 @@ async def main():
         fasta_dir=fasta_dir,
         out=folds_dir,
         diffusion_steps=100,
-        device='xpu:0'  # or 'cpu' if GPU not available
+        device='cuda:0'  # or 'cpu' if GPU not available
     )
 
     proteinmpnn = ProteinMPNN(
-        proteinmpnn_path=Path("/path/to/ProteinMPNN"),  # Update with actual path
+        proteinmpnn_path=Path("/eagle/FoundEpidem/avasan/Softwares/ProteinMPNN"),  # Update with actual path
         num_seq=1,
         max_retries=5,
         sampling_temp='0.1',
         batch_size=250,
         model_name='v_48_020',
         model_weights='soluble_model_weights',
-        device='xpu:0'  # or 'cpu' if GPU not available
+        device='cuda:0'  # or 'cpu' if GPU not available
     )
 
     async with await Manager.from_exchange_factory(

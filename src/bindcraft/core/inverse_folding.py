@@ -80,7 +80,9 @@ class ProteinMPNN(InverseFolding):
                  pdb_path: Path,
                  output_path: Path,
                  remodel_positions: list[int]):
+        print("About to run mpnn")
         jsonls = [input_path / fi for fi in self.file_intermediates]
+        print(jsonls)
         self.prepare(pdb_path, *jsonls, remodel_positions)
         self.run(jsonls, output_path)
 

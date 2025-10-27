@@ -212,7 +212,7 @@ class PeptideDesignCoordinator(Agent):
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
         logger.info(f"Coordinator: Starting design cycle for trial {trial}")
-
+        print("about to fold")
         try:
             # Step 1: Forward folding (initial only)
             if is_initial:
@@ -302,7 +302,7 @@ class PeptideDesignCoordinator(Agent):
             "all_cycles": [],
             "error_message": "",
         }
-
+        print(results)
         for trial in range(n_rounds):
             is_initial = trial == 0
 
