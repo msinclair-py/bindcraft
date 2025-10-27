@@ -23,6 +23,13 @@ from bindcraft.core.inverse_folding import ProteinMPNN
 from bindcraft.analysis.energy import SimpleEnergy
 from bindcraft.util.quality_control import SequenceQualityControl
 
+def set_gpu_for_process(gpu_id):
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+    print(f"Set GPU for process to {gpu_id}")
+    init_logging('INFO')
+
+
 EXCHANGE_PORT = 5346
 async def main():
     init_logging('INFO')
@@ -42,7 +49,7 @@ async def main():
     temp = '0.1'
     mpnn_model = 'v_48_020'
     mpnn_weights = 'soluble_model_weights'
-    device = 'cuda:0'
+    device = 'cuda'
 
     qc_kwargs = {
         'max_repeat': 4,
@@ -77,7 +84,7 @@ async def main():
         mp_context = multiprocessing.get_context('spawn')
         executor=ProcessPoolExecutor(
                     max_workers = 5,
-                    initializer=init_logging,
+                    initializer=set_gpu_for_process, initargs=(0,), #init_logging,
                     mp_context=mp_context)
         async with await Manager.from_exchange_factory(
             factory=factory,
