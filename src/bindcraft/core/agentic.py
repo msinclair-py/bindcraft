@@ -53,7 +53,7 @@ class ForwardFoldingAgent(Agent):
         structure = self.fold_alg(sequences, label, seq_label)
         logger.info(f"Initial structure folded: {structure}")
 
-        return str(structure)
+        return structure
 
     @action
     async def refold_sequences(
@@ -199,6 +199,14 @@ class PeptideDesignCoordinator(Agent):
         self.analyzer = analyzer
 
     @action
+    async def prepare_run(self,
+                          target_sequence: str,
+                          binder_sequence: str,):
+        structure = await self.forward_folder.fold_initial(
+            target_sequence, binder_sequence, 0
+        )
+
+    @action
     async def run_design_cycle(
         self,
         target_sequence: str,
@@ -208,20 +216,12 @@ class PeptideDesignCoordinator(Agent):
         fasta_out: Path,
         remodel_indices: list[int],
         trial: int,
-        is_initial: bool = False,
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
         logger.info(f"Coordinator: Starting design cycle for trial {trial}")
         print("about to fold")
         try:
-            # Step 1: Forward folding (initial only)
-            if is_initial:
-                initial_pdb = await self.forward_folder.fold_initial(
-                    target_sequence, binder_sequence, trial
-                )
-                logger.info(f"Coordinator: Initial fold complete: {initial_pdb}")
-
-            # Step 2: Inverse folding
+            # Step 1: Inverse folding
             generated_sequences = await self.inverse_folder.generate_sequences(
                 fasta_in, pdb_path, fasta_out, remodel_indices
             )
@@ -234,7 +234,7 @@ class PeptideDesignCoordinator(Agent):
                     "trial": trial,
                 }
 
-            # Step 3: Quality control
+            # Step 2: Quality control
             filtered_sequences = await self.qc_agent.filter_sequences(
                 generated_sequences
             )
@@ -247,12 +247,12 @@ class PeptideDesignCoordinator(Agent):
                     "trial": trial,
                 }
 
-            # Step 4: Refolding
+            # Step 3: Refolding
             folded_structures = await self.forward_folder.refold_sequences(
                 target_sequence, filtered_sequences, trial
             )
 
-            # Step 5: Analysis and filtering
+            # Step 4: Analysis and filtering
             evaluated_structures, passing_structures = (
                 await self.analyzer.evaluate_structures(folded_structures)
             )
@@ -303,11 +303,14 @@ class PeptideDesignCoordinator(Agent):
             "error_message": "",
         }
         print(results)
-        for trial in range(n_rounds):
-            is_initial = trial == 0
 
+        (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
+        (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
+        await self.prepare_run(target_sequence, binder_sequence)
+
+        for trial in range(1, n_rounds + 1):
             # Construct paths for this trial
-            last_trial = trial - 1 if trial > 0 else 0
+            last_trial = trial - 1
             fasta_in = fasta_base_path / f"trial_{last_trial}"
             fasta_out = fasta_base_path / f"trial_{trial}"
             pdb_path = pdb_base_path / f"trial_{last_trial}"
@@ -320,7 +323,6 @@ class PeptideDesignCoordinator(Agent):
                 fasta_out,
                 remodel_indices,
                 trial,
-                is_initial=is_initial,
             )
 
             results["all_cycles"].append(cycle_result)

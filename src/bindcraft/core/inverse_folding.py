@@ -104,7 +104,7 @@ class ProteinMPNN(InverseFolding):
             '--path_to_model_weights', str(self.model_weights),
             '--device', self.device,
         ]
-        
+
         subprocess.run(cmd, check=True)
 
     def postprocessing(self,

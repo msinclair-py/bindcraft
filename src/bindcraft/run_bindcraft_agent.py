@@ -39,10 +39,10 @@ async def main():
 
     proteinmpnn = ProteinMPNN(
         proteinmpnn_path=Path("/eagle/FoundEpidem/avasan/Softwares/ProteinMPNN"),  # Update with actual path
-        num_seq=1,
+        num_seq=10,
         max_retries=5,
         sampling_temp='0.1',
-        batch_size=250,
+        batch_size=10,
         model_name='v_48_020',
         model_weights='soluble_model_weights',
         device='cuda:0'  # or 'cpu' if GPU not available
