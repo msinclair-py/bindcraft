@@ -67,6 +67,7 @@ class Chai(Folding):
                 num_diffn_timesteps=self.diffusion_steps,
             )
 
+            (self.out / exp_label).mkdir(exist_ok=True)
             pdb = self.postprocess(tmp, f'{exp_label}/{out_label}')
 
         return pdb

@@ -29,23 +29,43 @@ async def main():
     fasta_dir.mkdir(exist_ok=True)
     folds_dir.mkdir(exist_ok=True)
 
+    # these need to be somehow passed into the call
+    nseqs = 25
+    batch_size = 250
+    retries = 5
+    temp = '0.1'
+    mpnn_model = 'v_48_020'
+    mpnn_weights = 'soluble_model_weights'
+    device = 'cuda:0'
+
+    qc_kwargs = {
+        'max_repeat': 4,
+        'max_appearance_ratio': 0.33,
+        'max_charge': 5,
+        'max_charge_ratio': 0.5,
+        'max_hydrophobic_ratio': 0.8,
+        'min_diversity': 8,
+        'bad_motifs': [],
+        'bad_n_termini': None # use defaults
+    }
+
     # Initialize algorithm instances with required parameters
     chai = Chai(
         fasta_dir=fasta_dir,
         out=folds_dir,
         diffusion_steps=100,
-        device='cuda:0'  # or 'cpu' if GPU not available
+        device=device  # or 'cpu' if GPU not available
     )
 
     proteinmpnn = ProteinMPNN(
         proteinmpnn_path=Path("/eagle/FoundEpidem/avasan/Softwares/ProteinMPNN"),  # Update with actual path
-        num_seq=25,
-        max_retries=5,
-        sampling_temp='0.1',
-        batch_size=250,
-        model_name='v_48_020',
-        model_weights='soluble_model_weights',
-        device='cuda:0'  # or 'cpu' if GPU not available
+        num_seq=nseqs,
+        max_retries=retries,
+        sampling_temp=temp,
+        batch_size=batch_size,
+        model_name=mpnn_model,
+        model_weights=mpnn_weights,
+        device=device  # or 'cpu' if GPU not available
     )
 
     async with await Manager.from_exchange_factory(
@@ -63,7 +83,7 @@ async def main():
         )
         qc_agent = await manager.launch(
             QualityControlAgent,
-            args=(SequenceQualityControl(),)
+            args=(SequenceQualityControl(**qc_kwargs),)
         )
         analyzer = await manager.launch(
             AnalysisAgent,
@@ -73,7 +93,7 @@ async def main():
         # Launch coordinator with handles to other agents
         coordinator = await manager.launch(
             PeptideDesignCoordinator,
-            args=(forward_folder, inverse_folder, qc_agent, analyzer)
+            args=(forward_folder, inverse_folder, qc_agent, analyzer, nseqs, retries)
         )
 
         # Define sequences for design

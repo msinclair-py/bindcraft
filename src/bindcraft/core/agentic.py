@@ -193,12 +193,16 @@ class PeptideDesignCoordinator(Agent):
         inverse_folder: Handle[InverseFoldingAgent],
         qc_agent: Handle[QualityControlAgent],
         analyzer: Handle[AnalysisAgent],
+        nseqs: int,
+        retries: int,
     ) -> None:
         super().__init__()
         self.forward_folder = forward_folder
         self.inverse_folder = inverse_folder
         self.qc_agent = qc_agent
         self.analyzer = analyzer
+        self.nseqs = nseqs
+        self.retries = retries
 
     @action
     async def prepare_run(self,
@@ -225,24 +229,27 @@ class PeptideDesignCoordinator(Agent):
         try:
             filtered_sequences = []
             i = 0
-            while len(filtered_sequences) < self.inverse_folder.nseqs and i < self.inverse_folder.retries:
+
+            while len(filtered_sequences) < self.nseqs and i < self.retries:
                 # Step 1: Inverse folding
                 generated_sequences = await self.inverse_folder.generate_sequences(
                     fasta_in, pdb_path, fasta_out, remodel_indices
                 )
 
-                if not generated_sequences:
-                    logger.warning("No sequences generated in inverse folding")
-                    return {
-                        "success": False,
-                        "error": "No sequences generated",
-                        "trial": trial,
-                    }
+                #if not generated_sequences:
+                #    logger.warning("No sequences generated in inverse folding")
+                #    return {
+                #        "success": False,
+                #        "error": "No sequences generated",
+                #        "trial": trial,
+                #    }
 
                 # Step 2: Quality control
                 filtered_sequences += await self.qc_agent.filter_sequences(
                     generated_sequences
                 )
+
+                i += 1
 
             if not filtered_sequences:
                 logger.warning("No sequences passed quality control, max retries attempted.")
