@@ -100,26 +100,18 @@ async def main():
         device=device  # or 'cpu' if GPU not available
     )
     with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
-        # Get the spawn context (spawn_http_exchange already sets the start method)
-        try:
-            mp_context = multiprocessing.get_context('spawn')
-        except RuntimeError:
-            # If context is already set, just use the default
-            mp_context = None
-
         # Create separate executors for different task types
+        # spawn_http_exchange already handles multiprocessing context setup
         # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
         folding_executor = ProcessPoolExecutor(
             max_workers=4,
-            initializer=set_gpu_for_folding,
-            mp_context=mp_context
+            initializer=set_gpu_for_folding
         )
 
         # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
         other_tasks_executor = ProcessPoolExecutor(
             max_workers=5,
-            initializer=set_gpu_for_other_tasks,
-            mp_context=mp_context
+            initializer=set_gpu_for_other_tasks
         )
 
         async with await Manager.from_exchange_factory(
