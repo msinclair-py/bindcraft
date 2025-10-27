@@ -92,6 +92,8 @@ class InverseFoldingAgent(Agent):
     def __init__(self, inv_fold_alg: InverseFolding) -> None:
         super().__init__()
         self.inv_fold_alg = inv_fold_alg
+        self.nseqs = self.inv_fold_alg.num_seq
+        self.retries = self.inv_fold_alg.max_retries
 
     @action
     async def generate_sequences(
@@ -221,26 +223,29 @@ class PeptideDesignCoordinator(Agent):
         logger.info(f"Coordinator: Starting design cycle for trial {trial}")
         print("about to fold")
         try:
-            # Step 1: Inverse folding
-            generated_sequences = await self.inverse_folder.generate_sequences(
-                fasta_in, pdb_path, fasta_out, remodel_indices
-            )
+            filtered_sequences = []
+            i = 0
+            while len(filtered_sequences) < self.inverse_folder.nseqs and i < self.inverse_folder.retries:
+                # Step 1: Inverse folding
+                generated_sequences = await self.inverse_folder.generate_sequences(
+                    fasta_in, pdb_path, fasta_out, remodel_indices
+                )
 
-            if not generated_sequences:
-                logger.warning("No sequences generated in inverse folding")
-                return {
-                    "success": False,
-                    "error": "No sequences generated",
-                    "trial": trial,
-                }
+                if not generated_sequences:
+                    logger.warning("No sequences generated in inverse folding")
+                    return {
+                        "success": False,
+                        "error": "No sequences generated",
+                        "trial": trial,
+                    }
 
-            # Step 2: Quality control
-            filtered_sequences = await self.qc_agent.filter_sequences(
-                generated_sequences
-            )
+                # Step 2: Quality control
+                filtered_sequences += await self.qc_agent.filter_sequences(
+                    generated_sequences
+                )
 
             if not filtered_sequences:
-                logger.warning("No sequences passed quality control")
+                logger.warning("No sequences passed quality control, max retries attempted.")
                 return {
                     "success": False,
                     "error": "No sequences passed QC",
