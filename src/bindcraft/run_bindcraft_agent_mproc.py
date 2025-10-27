@@ -176,5 +176,5 @@ async def main():
             print(f"Workflow completed: {results}")
 
 if __name__ == '__main__':
-    setup_multiprocessing()
-    asyncio.run(main())
+    #setup_multiprocessing()
+    raise SystemExit(asyncio.run(main()))
