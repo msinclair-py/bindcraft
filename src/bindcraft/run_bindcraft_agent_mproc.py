@@ -23,18 +23,29 @@ from bindcraft.core.inverse_folding import ProteinMPNN
 from bindcraft.analysis.energy import SimpleEnergy
 from bindcraft.util.quality_control import SequenceQualityControl
 
-def set_gpu_for_folding(gpu_id):
-    """Initializer for folding processes - uses 4 GPUs in round-robin."""
+# Global counter for assigning GPUs in round-robin fashion
+_folding_worker_counter = 0
+_folding_worker_lock = multiprocessing.Lock()
+
+def set_gpu_for_folding():
+    """Initializer for folding processes - assigns GPUs 0-3 in round-robin."""
     import os
+    global _folding_worker_counter
+
+    # Assign GPU based on worker count (round-robin across 0-3)
+    with _folding_worker_lock:
+        gpu_id = _folding_worker_counter % 4
+        _folding_worker_counter += 1
+
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    print(f"Set GPU for folding process to {gpu_id}")
+    print(f"Set GPU for folding process to GPU {gpu_id}")
     init_logging('INFO')
 
-def set_gpu_for_other_tasks(gpu_id):
-    """Initializer for inverse folding/analysis/QC processes - uses 1 GPU."""
+def set_gpu_for_other_tasks():
+    """Initializer for inverse folding/analysis/QC processes - uses GPU 4."""
     import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    print(f"Set GPU for other tasks process to {gpu_id}")
+    os.environ['CUDA_VISIBLE_DEVICES'] = '4'
+    print(f"Set GPU for other tasks process to GPU 4")
     init_logging('INFO')
 
 
@@ -92,19 +103,17 @@ async def main():
         mp_context = multiprocessing.get_context('spawn')
 
         # Create separate executors for different task types
-        # Folding uses 4 GPUs (GPUs 0-3)
+        # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
         folding_executor = ProcessPoolExecutor(
             max_workers=4,
             initializer=set_gpu_for_folding,
-            initargs=(0,),  # GPU 0 for first worker, round-robin for others
             mp_context=mp_context
         )
 
         # Inverse folding, QC, and analysis use 1 GPU (GPU 4)
         other_tasks_executor = ProcessPoolExecutor(
-            max_workers=3,
+            max_workers=5,
             initializer=set_gpu_for_other_tasks,
-            initargs=(4,),  # GPU 4 for all other tasks
             mp_context=mp_context
         )
 
