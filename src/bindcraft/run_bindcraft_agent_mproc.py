@@ -76,7 +76,7 @@ async def main():
     with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
         mp_context = multiprocessing.get_context('spawn')
         executor=ProcessPoolExecutor(
-                    max_workers = 4,
+                    max_workers = 5,
                     initializer=init_logging,
                     mp_context=mp_context)
         async with await Manager.from_exchange_factory(
