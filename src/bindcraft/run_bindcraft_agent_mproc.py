@@ -100,7 +100,12 @@ async def main():
         device=device  # or 'cpu' if GPU not available
     )
     with spawn_http_exchange('localhost', EXCHANGE_PORT) as factory:
-        mp_context = multiprocessing.get_context('spawn')
+        # Get the spawn context (spawn_http_exchange already sets the start method)
+        try:
+            mp_context = multiprocessing.get_context('spawn')
+        except RuntimeError:
+            # If context is already set, just use the default
+            mp_context = None
 
         # Create separate executors for different task types
         # Folding uses 4 GPUs (GPUs 0-3) with round-robin assignment
