@@ -20,6 +20,7 @@ import parsl
 from parsl import Config
 from parsl import HighThroughputExecutor
 from parsl.providers import LocalProvider
+from parsl.launchers import MpiExecLauncher
 
 from academy.agent import Agent, action
 from academy.handle import Handle
@@ -58,16 +59,17 @@ class ForwardFoldingAgent(Agent):
                     label='bindcraft_folding',
                     cores_per_worker=4,
                     worker_debug=True,
-                    provider=LocalProvider(init_blocks=1, max_blocks=1),
-                    max_workers=4,
+                    provider=LocalProvider(parallelism=1, max_blocks=4), #init_blocks=1, 
+                    max_workers_per_node=4,
+                    available_accelerators=['0', '1', '2', '3']
                 ),
             ],
         )
 
     async def agent_on_startup(self) -> None:
         """Initialize Parsl on agent startup."""
-        max_workers = self.config.executors[0].max_workers
-        logger.info(f'Initializing Parsl with {self.num_workers} workers')
+        #max_workers = self.config.executors[0].max_workers
+        logger.info(f'Initializing Parsl workers')
         self.dfk = parsl.load(self.config)
 
     async def agent_on_shutdown(self) -> None:
@@ -108,14 +110,18 @@ class ForwardFoldingAgent(Agent):
         logger.info(f"Forward folding: Refolding {len(sequences)} sequences for trial {trial}")
 
         folded_structures = {}
-        max_fold = min(self.config.executors[0].max_workers, len(sequences))  # Limit to 4 per round
+        max_fold = min(16, len(sequences))  # Limit to 4 per round
 
         for i, seq in enumerate(sequences[:max_fold]):
             label = f"trial_{trial}"
             seq_label = f"seq_{i}"
 
             seqs = [target_sequence, seq]
-            structure = await asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label))
+            if i == max_fold-1:
+                structure = await asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label))
+            else:
+                structure = asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label))
+
             #structure = self.fold_alg(seqs, label, seq_label)
 
             folded_structures[i] = {
