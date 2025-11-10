@@ -110,7 +110,7 @@ class ForwardFoldingAgent(Agent):
             seqs = [target_sequence, seq]
             structures.append(asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label)))
 
-        structures = asyncio.gather(*structures)
+        structures = await asyncio.gather(*structures)
         
         folded_structures = {i: {
             'sequence': sequences[i],
