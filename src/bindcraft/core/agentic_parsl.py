@@ -47,16 +47,36 @@ def fold_sequence_task(
     result = fold_alg(sequence, label, seq_label)
     return result
 
-class ForwardFoldingAgent(Agent):
-    """Agent responsible for forward folding (structure prediction)."""
+@parsl.python_app
+def inverse_fold_task(
+    inv_fold_alg,
+    input_path: Path,
+    pdb_path: Path,
+    output_path: Path,
+    remodel_positions: list[int]
+) -> list[str]:
 
-    def __init__(self, 
+    sequences = inv_fold_alg(
+        input_path=input_path,
+        pdb_path=pdb_path,
+        output_path=output_path,
+        remodel_positions=remodel_positions,
+    )
+
+    return sequences
+
+class FoldingAgent(Agent):
+    """
+    Agent responsible for all folding tasks.
+    """
+    def __init__(self,
                  fold_alg: Folding,
-                 parsl_config: Config) -> None:
-        super().__init__()
+                 inv_fold_alg: InverseFolding,
+                 parsl_config: Config):
         self.fold_alg = fold_alg
+        self.inv_fold_alg = inv_fold_alg
         self.config = parsl_config
-
+    
     async def agent_on_startup(self) -> None:
         """Initialize Parsl on agent startup."""
         #max_workers = self.config.executors[0].max_workers
@@ -123,16 +143,6 @@ class ForwardFoldingAgent(Agent):
 
         return folded_structures
 
-
-class InverseFoldingAgent(Agent):
-    """Agent responsible for inverse folding (sequence generation)."""
-
-    def __init__(self, inv_fold_alg: InverseFolding) -> None:
-        super().__init__()
-        self.inv_fold_alg = inv_fold_alg
-        self.nseqs = self.inv_fold_alg.num_seq
-        self.retries = self.inv_fold_alg.max_retries
-
     @action
     async def generate_sequences(
         self,
@@ -143,19 +153,17 @@ class InverseFoldingAgent(Agent):
     ) -> list[str]:
         """Generate new sequences via inverse folding."""
         logger.info(f"Inverse folding: Generating sequences")
+        
+        sequences = await asyncio.wrap_future(inverse_fold_task(
+            inv_fold_alg=self.inv_fold_alg,
+            input_path=fasta_in,
+            pdb_path=pdb_path,
+            output_path=fasta_out,
+            remodel_positions=remodel_indices
+        ))
 
-        try:
-            sequences = self.inv_fold_alg(
-                input_path=fasta_in,
-                pdb_path=pdb_path,
-                output_path=fasta_out,
-                remodel_positions=remodel_indices,
-            )
-            logger.info(f"Generated {len(sequences)} sequences")
-            return sequences
-        except Exception as e:
-            logger.error(f"Inverse folding failed: {e}")
-            return []
+        logger.info(f"Generated {len(sequences)} sequences")
+        return sequences
 
 
 class QualityControlAgent(Agent):
@@ -228,18 +236,16 @@ class PeptideDesignCoordinator(Agent):
 
     def __init__(
         self,
-        forward_folder: Handle[ForwardFoldingAgent],
-        inverse_folder: Handle[InverseFoldingAgent],
+        fold_agent: Handle[FoldingAgent],
         qc_agent: Handle[QualityControlAgent],
-        analyzer: Handle[AnalysisAgent],
+        analyzer_agent: Handle[AnalysisAgent],
         nseqs: int,
         retries: int,
     ) -> None:
         super().__init__()
-        self.forward_folder = forward_folder
-        self.inverse_folder = inverse_folder
+        self.fold_agent = fold_agent
         self.qc_agent = qc_agent
-        self.analyzer = analyzer
+        self.analyzer_agent = analyzer_agent
         self.nseqs = nseqs
         self.retries = retries
 
@@ -247,7 +253,7 @@ class PeptideDesignCoordinator(Agent):
     async def prepare_run(self,
                           target_sequence: str,
                           binder_sequence: str,):
-        structure = await self.forward_folder.fold_initial(
+        structure = await self.fold_agent.fold_initial(
             target_sequence, binder_sequence, 0
         )
 
@@ -271,7 +277,7 @@ class PeptideDesignCoordinator(Agent):
 
             while len(filtered_sequences) < self.nseqs and i < self.retries:
                 # Step 1: Inverse folding
-                generated_sequences = await self.inverse_folder.generate_sequences(
+                generated_sequences = await self.fold_agent.generate_sequences(
                     fasta_in, pdb_path, fasta_out, remodel_indices
                 )
 
@@ -291,13 +297,13 @@ class PeptideDesignCoordinator(Agent):
                 }
 
             # Step 3: Refolding
-            folded_structures = await self.forward_folder.refold_sequences(
+            folded_structures = await self.fold_agent.refold_sequences(
                 target_sequence, filtered_sequences, trial
             )
 
             # Step 4: Analysis and filtering
             evaluated_structures, passing_structures = (
-                await self.analyzer.evaluate_structures(folded_structures)
+                await self.analyzer_agent.evaluate_structures(folded_structures)
             )
 
             logger.info(
