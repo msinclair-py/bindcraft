@@ -66,9 +66,7 @@ class ForwardFoldingAgent(Agent):
         logger.info(f"Forward folding: Refolding {len(sequences)} sequences for trial {trial}")
 
         folded_structures = {}
-        max_fold = min(4, len(sequences))  # Limit to 4 per round
-
-        for i, seq in enumerate(sequences[:max_fold]):
+        for i, seq in enumerate(sequences):
             label = f"trial_{trial}"
             seq_label = f"seq_{i}"
 
@@ -157,7 +155,7 @@ class AnalysisAgent(Agent):
     async def evaluate_structures(
         self,
         folded_structures: dict[int, dict[str, Any]],
-        energy_threshold: float = -50.0,
+        energy_threshold: float = -10.0,
     ) -> tuple[dict[int, dict[str, Any]], list[str]]:
         """Analyze folded structures and filter based on energy."""
         logger.info(f"Analysis: Evaluating {len(folded_structures)} structures")
@@ -300,10 +298,10 @@ class PeptideDesignCoordinator(Agent):
         fasta_base_path: Path,
         pdb_base_path: Path,
         remodel_indices: list[int],
-        n_rounds: int = 3,
+        num_rounds: int = 3,
     ) -> dict[str, Any]:
         """Run the complete peptide design workflow."""
-        logger.info(f"Coordinator: Starting full workflow for {n_rounds} rounds")
+        logger.info(f"Coordinator: Starting full workflow for {num_rounds} rounds")
 
         results = {
             "success": True,
@@ -320,7 +318,7 @@ class PeptideDesignCoordinator(Agent):
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
         await self.prepare_run(target_sequence, binder_sequence)
 
-        for trial in range(1, n_rounds + 1):
+        for trial in range(1, num_rounds + 1):
             # Construct paths for this trial
             last_trial = trial - 1
             fasta_in = fasta_base_path / f"trial_{last_trial}"

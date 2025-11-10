@@ -50,21 +50,24 @@ def fold_sequence_task(
 class ForwardFoldingAgent(Agent):
     """Agent responsible for forward folding (structure prediction)."""
 
-    def __init__(self, fold_alg: Folding) -> None:
+    def __init__(self, 
+                 fold_alg: Folding,
+                 parsl_config: Config) -> None:
         super().__init__()
         self.fold_alg = fold_alg
-        self.config = Config(
-            executors=[
-                HighThroughputExecutor(
-                    label='bindcraft_folding',
-                    cores_per_worker=4,
-                    worker_debug=True,
-                    provider=LocalProvider(parallelism=1, max_blocks=4), #init_blocks=1, 
-                    max_workers_per_node=4,
-                    available_accelerators=['0', '1', '2', '3']
-                ),
-            ],
-        )
+        self.config = parsl_config
+        #self.config = Config(
+        #    executors=[
+        #        HighThroughputExecutor(
+        #            label='bindcraft_folding',
+        #            cores_per_worker=4,
+        #            worker_debug=True,
+        #            provider=LocalProvider(parallelism=1, max_blocks=4), #init_blocks=1, 
+        #            max_workers_per_node=4,
+        #            available_accelerators=['0', '1', '2', '3']
+        #        ),
+        #    ],
+        #)
 
     async def agent_on_startup(self) -> None:
         """Initialize Parsl on agent startup."""
@@ -349,10 +352,10 @@ class PeptideDesignCoordinator(Agent):
         fasta_base_path: Path,
         pdb_base_path: Path,
         remodel_indices: list[int],
-        n_rounds: int = 3,
+        num_rounds: int = 3,
     ) -> dict[str, Any]:
         """Run the complete peptide design workflow."""
-        logger.info(f"Coordinator: Starting full workflow for {n_rounds} rounds")
+        logger.info(f"Coordinator: Starting full workflow for {num_rounds} rounds")
 
         results = {
             "success": True,
@@ -369,7 +372,7 @@ class PeptideDesignCoordinator(Agent):
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
         await self.prepare_run(target_sequence, binder_sequence)
 
-        for trial in range(1, n_rounds + 1):
+        for trial in range(1, num_rounds + 1):
             # Construct paths for this trial
             last_trial = trial - 1
             fasta_in = fasta_base_path / f"trial_{last_trial}"
