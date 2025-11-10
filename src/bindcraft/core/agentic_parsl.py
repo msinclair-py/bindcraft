@@ -56,18 +56,6 @@ class ForwardFoldingAgent(Agent):
         super().__init__()
         self.fold_alg = fold_alg
         self.config = parsl_config
-        #self.config = Config(
-        #    executors=[
-        #        HighThroughputExecutor(
-        #            label='bindcraft_folding',
-        #            cores_per_worker=4,
-        #            worker_debug=True,
-        #            provider=LocalProvider(parallelism=1, max_blocks=4), #init_blocks=1, 
-        #            max_workers_per_node=4,
-        #            available_accelerators=['0', '1', '2', '3']
-        #        ),
-        #    ],
-        #)
 
     async def agent_on_startup(self) -> None:
         """Initialize Parsl on agent startup."""
@@ -113,28 +101,26 @@ class ForwardFoldingAgent(Agent):
         logger.info(f"Forward folding: Refolding {len(sequences)} sequences for trial {trial}")
 
         folded_structures = {}
-        max_fold = min(16, len(sequences))  # Limit to 4 per round
 
-        for i, seq in enumerate(sequences[:max_fold]):
+        structures = []
+        for i, seq in enumerate(sequences):
             label = f"trial_{trial}"
             seq_label = f"seq_{i}"
 
             seqs = [target_sequence, seq]
-            if i == max_fold-1:
-                structure = await asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label))
-            else:
-                structure = asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label))
+            structures.append(asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label)))
 
-            #structure = self.fold_alg(seqs, label, seq_label)
+        structures = asyncio.gather(*structures)
+        
+        folded_structures = {i: {
+            'sequence': sequences[i],
+            'structure': str(structures[i]),
+            'energy': None,
+            'rmsd': None
+        } for i in range(len(structures))}
 
-            folded_structures[i] = {
-                "sequence": seq,
-                "structure": str(structure),
-                "energy": None,
-                "rmsd": None,
-            }
+        logger.info(f"Folded {len(folded_structures)} structures")
 
-        logger.info(f"Refolded {len(folded_structures)} structures")
         return folded_structures
 
 
@@ -209,7 +195,7 @@ class AnalysisAgent(Agent):
     async def evaluate_structures(
         self,
         folded_structures: dict[int, dict[str, Any]],
-        energy_threshold: float = -50.0,
+        energy_threshold: float = -10.0,
     ) -> tuple[dict[int, dict[str, Any]], list[str]]:
         """Analyze folded structures and filter based on energy."""
         logger.info(f"Analysis: Evaluating {len(folded_structures)} structures")
@@ -218,6 +204,7 @@ class AnalysisAgent(Agent):
         passing_structures = []
 
         for idx, struct_data in folded_structures.items():
+            logger.info(f'Analyzing: {idx}, {struct_data["structure"]}')
             try:
                 energy = self.energy_alg(Path(struct_data["structure"]))
                 struct_data["energy"] = energy
@@ -287,14 +274,6 @@ class PeptideDesignCoordinator(Agent):
                 generated_sequences = await self.inverse_folder.generate_sequences(
                     fasta_in, pdb_path, fasta_out, remodel_indices
                 )
-
-                #if not generated_sequences:
-                #    logger.warning("No sequences generated in inverse folding")
-                #    return {
-                #        "success": False,
-                #        "error": "No sequences generated",
-                #        "trial": trial,
-                #    }
 
                 # Step 2: Quality control
                 filtered_sequences += await self.qc_agent.filter_sequences(
