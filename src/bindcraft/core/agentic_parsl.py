@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 @parsl.python_app
 def fold_sequence_task(
-    fold_alg,
+    fold_alg: Folding,
     sequence: str,
     label: str,
     seq_label: str,
@@ -49,7 +49,7 @@ def fold_sequence_task(
 
 @parsl.python_app
 def inverse_fold_task(
-    inv_fold_alg,
+    inv_fold_alg: InverseFolding,
     input_path: Path,
     pdb_path: Path,
     output_path: Path,
@@ -64,6 +64,135 @@ def inverse_fold_task(
     )
 
     return sequences
+
+@parsl.python_app
+def energy_task(
+    energy_alg: EnergyCalculation,
+    structure: Path,
+) -> float:
+    energy = energy_alg(structure)
+    return energy
+
+class ForwardFoldingAgent(Agent):
+    """
+    Agent responsible for all folding tasks.
+    """
+    def __init__(self,
+                 fold_alg: Folding,
+                 parsl_config: Config):
+        self.fold_alg = fold_alg
+        self.config = parsl_config
+    
+    async def agent_on_startup(self) -> None:
+        """Initialize Parsl on agent startup."""
+        #max_workers = self.config.executors[0].max_workers
+        logger.info(f'Initializing Parsl workers')
+        self.dfk = parsl.load(self.config)
+
+    async def agent_on_shutdown(self) -> None:
+        """Clean up Parsl on agent shutdown."""
+        logger.info('Cleaning up Parsl')
+        if self.dfk:
+            self.dfk.cleanup()
+            self.dfk = None
+        parsl.clear()
+
+    @action
+    async def fold_initial(
+        self,
+        target_sequence: str,
+        binder_sequence: str,
+        trial: int,
+    ) -> str:
+        """Perform initial forward folding on target-binder complex."""
+        logger.info(f"Forward folding: Initial fold for trial {trial}")
+
+        sequences = [target_sequence, binder_sequence]
+        label = f"trial_{trial}"
+        seq_label = "seq_0"
+
+        structure = self.fold_alg(sequences, label, seq_label)
+        logger.info(f"Initial structure folded: {structure}")
+
+        return structure
+
+    @action
+    async def refold_sequences(
+        self,
+        target_sequence: str,
+        sequences: list[str],
+        trial: int,
+    ) -> dict[int, dict[str, Any]]:
+        """Refold new sequences with target."""
+        logger.info(f"Forward folding: Refolding {len(sequences)} sequences for trial {trial}")
+
+        folded_structures = {}
+
+        structures = []
+        for i, seq in enumerate(sequences):
+            label = f"trial_{trial}"
+            seq_label = f"seq_{i}"
+
+            seqs = [target_sequence, seq]
+            structures.append(asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label)))
+
+        structures = await asyncio.gather(*structures)
+        
+        folded_structures = {i: {
+            'sequence': sequences[i],
+            'structure': str(structures[i]),
+            'energy': None,
+            'rmsd': None
+        } for i in range(len(structures))}
+
+        logger.info(f"Folded {len(folded_structures)} structures")
+
+        return folded_structures
+
+
+class InverseFoldingAgent:
+    def __init__(self,
+                 inv_fold_alg: InverseFolding,
+                 parsl_config: Config):
+        self.inv_fold_alg = inv_fold_alg
+        self.config = parsl_config
+
+    async def agent_on_startup(self) -> None:
+        """Initialize Parsl on agent startup."""
+        #max_workers = self.config.executors[0].max_workers
+        logger.info(f'Initializing Parsl workers')
+        self.dfk = parsl.load(self.config)
+
+    async def agent_on_shutdown(self) -> None:
+        """Clean up Parsl on agent shutdown."""
+        logger.info('Cleaning up Parsl')
+        if self.dfk:
+            self.dfk.cleanup()
+            self.dfk = None
+        parsl.clear()
+
+    @action
+    async def generate_sequences(
+        self,
+        fasta_in: Path,
+        pdb_path: Path,
+        fasta_out: Path,
+        remodel_indices: list[int],
+    ) -> list[str]:
+        """Generate new sequences via inverse folding."""
+        logger.info(f"Inverse folding: Generating sequences")
+        
+        sequences = await asyncio.wrap_future(inverse_fold_task(
+            inv_fold_alg=self.inv_fold_alg,
+            input_path=fasta_in,
+            pdb_path=pdb_path,
+            output_path=fasta_out,
+            remodel_positions=remodel_indices
+        ))
+
+        logger.info(f"Generated {len(sequences)} sequences")
+        return sequences
+
 
 class FoldingAgent(Agent):
     """
