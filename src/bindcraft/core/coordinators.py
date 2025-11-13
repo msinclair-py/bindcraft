@@ -76,7 +76,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         seq_label = 'seq_0'
 
         structure = self.fold_alg(sequences, label, seq_label)
-        self.logger.info('Initial structure folded: {structure}')
+        self.logger.info(f'Initial structure folded: {structure}')
 
         return structure
 
@@ -150,15 +150,18 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
     @action
     async def evaluate_structures(self,
                                   folded_structures: Result) -> tuple[Result, list[str]]:
-        self.logger.info('Analysis: Evaluating {len(folded_structures)} structures')
-        
-        keys, vals = folded_structures.items()
+        self.logger.info(f'Analysis: Evaluating {len(folded_structures)} structures')
+        self.logger.info(f'{folded_structures=}')
+        keys = list(folded_structures.keys())
+        vals = list(folded_structures.values())
         structures = [Path(val['structure']) for val in vals]
+        self.logger.info(f'Computing {len(structures)} calculations')
         futures = [asyncio.wrap_future(energy_task(self.energy_alg, structure)) 
                    for structure in structures]
 
         energies = await asyncio.gather(*futures)
 
+        self.logger.info(f'{energies=}')
         evaluated = {}
         passing = []
         for key, val, struc, energy in zip(keys, vals, structures, energies):
@@ -184,7 +187,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         trial: int,
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
-        logger.info(f"Coordinator: Starting design cycle for trial {trial}")
+        self.logger.info(f"Coordinator: Starting design cycle for trial {trial}")
         print("about to fold")
         try:
             filtered_sequences = []
@@ -204,7 +207,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                 i += 1
 
             if not filtered_sequences:
-                logger.warning("No sequences passed quality control, max retries attempted.")
+                self.logger.warning("No sequences passed quality control, max retries attempted.")
                 return {
                     "success": False,
                     "error": "No sequences passed QC",
@@ -216,12 +219,14 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                 target_sequence, filtered_sequences, trial
             )
 
+            self.logger.info('Measuring energy')
+
             # Step 4: Analysis and filtering
             evaluated_structures, passing_structures = (
                 await self.evaluate_structures(folded_structures)
             )
 
-            logger.info(
+            self.logger.info(
                 f"Coordinator: Cycle {trial} complete. "
                 f"{len(passing_structures)} structures passed filtering"
             )
@@ -237,7 +242,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             }
 
         except Exception as e:
-            logger.error(f"Coordinator: Error in design cycle {trial}: {e}")
+            self.logger.error(f"Coordinator: Error in design cycle {trial}: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -255,7 +260,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         num_rounds: int = 3,
     ) -> dict[str, Any]:
         """Run the complete peptide design workflow."""
-        logger.info(f"Coordinator: Starting full workflow for {num_rounds} rounds")
+        self.logger.info(f"Coordinator: Starting full workflow for {num_rounds} rounds")
 
         results = {
             "success": True,
@@ -270,7 +275,17 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
-        await self.prepare_run(target_sequence, binder_sequence)
+        structure = await self.refold_sequences(target_sequence, [binder_sequence], 1)
+        results['all_cycles'].append({
+            'success': True,
+            'trial': 0,
+            'generated_sequences': 1,
+            'filtered_sequences': 1,
+            'folded_structures': 1,
+            'passing_structures': str(structure),
+            'evaluated_structures': str(structure)
+            })
+        #await self.prepare_run(target_sequence, binder_sequence)
 
         for trial in range(1, num_rounds + 1):
             # Construct paths for this trial
@@ -292,7 +307,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             results["all_cycles"].append(cycle_result)
 
             if not cycle_result["success"]:
-                logger.warning(f"Design cycle {trial} failed: {cycle_result.get('error')}")
+                self.logger.warning(f"Design cycle {trial} failed: {cycle_result.get('error')}")
                 results["success"] = False
                 break
 
@@ -305,7 +320,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                 "filtered_sequences", 0
             )
 
-        logger.info(f"Coordinator: Workflow complete. {results['rounds_completed']} rounds completed")
+        self.logger.info(f"Coordinator: Workflow complete. {results['rounds_completed']} rounds completed")
         return results
 
 

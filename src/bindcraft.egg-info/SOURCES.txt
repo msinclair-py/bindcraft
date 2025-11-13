@@ -15,6 +15,7 @@ src/bindcraft/core/__init__.py
 src/bindcraft/core/agentic.py
 src/bindcraft/core/agentic_llm.py
 src/bindcraft/core/agentic_parsl.py
+src/bindcraft/core/coordinators.py
 src/bindcraft/core/folding.py
 src/bindcraft/core/inverse_folding.py
 src/bindcraft/core/main.py
