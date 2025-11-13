@@ -271,20 +271,27 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             "all_cycles": [],
             "error_message": "",
         }
-        print(results)
 
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
-        structure = await self.refold_sequences(target_sequence, [binder_sequence], 1)
+        structure = await self.refold_sequences(target_sequence, [binder_sequence], 0)
+        self.logger.info(structure)
+
         results['all_cycles'].append({
             'success': True,
             'trial': 0,
             'generated_sequences': 1,
             'filtered_sequences': 1,
             'folded_structures': 1,
-            'passing_structures': str(structure),
-            'evaluated_structures': str(structure)
+            'passing_structures': [str(structure[0]['structure'])],
+            'evaluated_structures': structure
             })
+            
+        # Update metrics
+        results["rounds_completed"] += 1
+        results["total_sequences_generated"] += 1
+        results["total_sequences_filtered"] += 1 
+
         #await self.prepare_run(target_sequence, binder_sequence)
 
         for trial in range(1, num_rounds + 1):
