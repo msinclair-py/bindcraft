@@ -37,8 +37,8 @@ class SequenceQualityControl:
         self.max_charge_ratio = max_charge_ratio
         self.max_hydrophobic_ratio = max_hydrophobic_ratio
         self.min_diversity = min_diversity
-        self.bad_motifs = bad_motifs or ['RK', 'DP', 'DG', 'DS']
-        self.bad_n_termini = bad_n_termini or ['Q', 'N']
+        self.bad_motifs = bad_motifs if bad_motifs is not None else ['RK', 'DP', 'DG', 'DS']
+        self.bad_n_termini = bad_n_termini if bad_n_termini is not None else ['Q', 'N']
 
         # Residue type definitions
         self.positive = ['K', 'R']
@@ -83,6 +83,7 @@ class SequenceQualityControl:
         
         for check in checks:
             if not check():
+                print(check.__name__)
                 return False
 
         return True
