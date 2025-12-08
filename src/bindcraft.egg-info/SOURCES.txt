@@ -12,8 +12,6 @@ src/bindcraft.egg-info/top_level.txt
 src/bindcraft/analysis/__init__.py
 src/bindcraft/analysis/energy.py
 src/bindcraft/core/__init__.py
-src/bindcraft/core/agentic.py
-src/bindcraft/core/agentic_llm.py
 src/bindcraft/core/agentic_parsl.py
 src/bindcraft/core/coordinators.py
 src/bindcraft/core/folding.py

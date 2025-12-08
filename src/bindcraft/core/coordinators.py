@@ -272,6 +272,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             "error_message": "",
         }
 
+        self.logger.info(f'{target_sequence=},{binder_sequence=},trial=0')
+
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
         structure = await self.refold_sequences(target_sequence, [binder_sequence], 0)

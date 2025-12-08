@@ -12,24 +12,22 @@ Workflow steps:
 5. Analysis & Filtering: Evaluate and select best candidates
 """
 
+from academy.agent import Agent, action
+from academy.handle import Handle
 import asyncio
 import logging
-from pathlib import Path
-from typing import Any
 import parsl
 from parsl import Config
 from parsl import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.launchers import MpiExecLauncher
-
-from academy.agent import Agent, action
-from academy.handle import Handle
+from pathlib import Path
+from typing import Any, Optional
 
 from .folding import Folding
 from .inverse_folding import InverseFolding
 from ..analysis.energy import EnergyCalculation, SimpleEnergy
 from ..util.quality_control import SequenceQualityControl
-
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +39,6 @@ def fold_sequence_task(
     seq_label: str,
 ) -> dict:
     """Parsl task for folding a single sequence."""
-
-    logger.info(f'Folding sequence {seq_label} on worker')
 
     result = fold_alg(sequence, label, seq_label)
     return result
@@ -66,6 +62,14 @@ def inverse_fold_task(
     return sequences
 
 @parsl.python_app
+def qc_task(
+    qc_alg: SequenceQualityControl,
+    seqs: list[str],
+) -> None:
+    for seq in seqs:
+        pass # NOTE: finish this
+
+@parsl.python_app
 def energy_task(
     energy_alg: EnergyCalculation,
     structure: Path,
@@ -85,7 +89,6 @@ class ForwardFoldingAgent(Agent):
     
     async def agent_on_startup(self) -> None:
         """Initialize Parsl on agent startup."""
-        #max_workers = self.config.executors[0].max_workers
         logger.info(f'Initializing Parsl workers')
         self.dfk = parsl.load(self.config)
 
@@ -98,56 +101,32 @@ class ForwardFoldingAgent(Agent):
         parsl.clear()
 
     @action
-    async def fold_initial(
+    async def fold_sequences(
         self,
-        target_sequence: str,
-        binder_sequence: str,
-        trial: int,
+        sequences: list[str],
+        names: list[str],
+        constraints: Optional[list[dict]]=None,
     ) -> str:
         """Perform initial forward folding on target-binder complex."""
-        logger.info(f"Forward folding: Initial fold for trial {trial}")
-
-        sequences = [target_sequence, binder_sequence]
-        label = f"trial_{trial}"
-        seq_label = "seq_0"
-
-        structure = self.fold_alg(sequences, label, seq_label)
-        logger.info(f"Initial structure folded: {structure}")
-
-        return structure
-
-    @action
-    async def refold_sequences(
-        self,
-        target_sequence: str,
-        sequences: list[str],
-        trial: int,
-    ) -> dict[int, dict[str, Any]]:
-        """Refold new sequences with target."""
-        logger.info(f"Forward folding: Refolding {len(sequences)} sequences for trial {trial}")
-
-        folded_structures = {}
-
-        structures = []
-        for i, seq in enumerate(sequences):
-            label = f"trial_{trial}"
-            seq_label = f"seq_{i}"
-
-            seqs = [target_sequence, seq]
-            structures.append(asyncio.wrap_future(fold_sequence_task(self.fold_alg, seqs, label, seq_label)))
-
-        structures = await asyncio.gather(*structures)
+        logger.info(f"Folding {len(sequences)} seqs with Chai-1")
         
-        folded_structures = {i: {
-            'sequence': sequences[i],
-            'structure': str(structures[i]),
-            'energy': None,
-            'rmsd': None
-        } for i in range(len(structures))}
+        if isinstance(sequences, str): # single sequence passed
+            sequences = [[sequences]]
+        
+        futures = []
+        for sequence, name, constraint in zip(sequences, names, constraints):
+            if isinstance(sequence, str): # single sequence to fold
+                sequence = [sequence]
 
-        logger.info(f"Folded {len(folded_structures)} structures")
+            futures.append(
+                asyncio.wrap_future(
+                    fold_sequence_task(self.fold_alg, sequence, name, constraint)
+                )
+            )
 
-        return folded_structures
+        results = await asyncio.gather(*futures)
+
+        return results
 
 
 class InverseFoldingAgent:
