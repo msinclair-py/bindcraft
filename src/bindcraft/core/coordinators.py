@@ -274,6 +274,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         structure = await self.refold_sequences(target_sequence, [binder_sequence], 0)
         self.logger.info(structure)
 
+        evaluated, _ = await self.evaluate_structures(structure)
+
         results['all_cycles'].append({
             'success': True,
             'trial': 0,
@@ -281,7 +283,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             'filtered_sequences': 1,
             'folded_structures': 1,
             'passing_structures': [str(structure[0]['structure'])],
-            'evaluated_structures': structure
+            'evaluated_structures': evaluated
             })
             
         # Update metrics
