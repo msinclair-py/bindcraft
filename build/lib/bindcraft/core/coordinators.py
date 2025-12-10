@@ -151,6 +151,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
     async def evaluate_structures(self,
                                   folded_structures: Result) -> tuple[Result, list[str]]:
         self.logger.info(f'Analysis: Evaluating {len(folded_structures)} structures')
+        self.logger.info(f'{folded_structures=}')
         keys = list(folded_structures.keys())
         vals = list(folded_structures.values())
         structures = [Path(val['structure']) for val in vals]
@@ -160,6 +161,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
         energies = await asyncio.gather(*futures)
 
+        self.logger.info(f'{energies=}')
         evaluated = {}
         passing = []
         for key, val, struc, energy in zip(keys, vals, structures, energies):
@@ -186,6 +188,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
         self.logger.info(f"Coordinator: Starting design cycle for trial {trial}")
+        print("about to fold")
         try:
             filtered_sequences = []
             i = 0
@@ -268,6 +271,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             "all_cycles": [],
             "error_message": "",
         }
+
+        self.logger.info(f'{target_sequence=},{binder_sequence=},trial=0')
 
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
