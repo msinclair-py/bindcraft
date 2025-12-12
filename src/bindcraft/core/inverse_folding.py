@@ -122,7 +122,7 @@ class ProteinMPNN(InverseFolding):
         with open(path) as f:
             raw_data = f.readlines()
         
-        seqs = [line.strip() for line in raw_data[3::2]]:
+        seqs = [line.strip() for line in raw_data[3::2]]
             
         return list(set(seqs))
 
