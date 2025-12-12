@@ -3,10 +3,11 @@ from academy.agent import Agent, action
 from academy.handle import Handle
 import asyncio
 import logging
+import MDAnalysis as mda
 import parsl
 from parsl import Config
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from .agentic_parsl import fold_sequence_task, inverse_fold_task, energy_task
 from .folding import Folding
 from .inverse_folding import InverseFolding
@@ -253,7 +254,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         binder_sequence: str,
         fasta_base_path: Path,
         pdb_base_path: Path,
-        remodel_indices: list[int],
+        remodel_indices: Optional[list[int]]=None, 
         num_rounds: int = 3,
     ) -> dict[str, Any]:
         """Run the complete peptide design workflow."""
@@ -291,7 +292,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         results["total_sequences_generated"] += 1
         results["total_sequences_filtered"] += 1 
 
-        #await self.prepare_run(target_sequence, binder_sequence)
+        if remodel_indices is None:
+            remodel_indices = await self.get_remodel_indices(structure[0]['structure'])
 
         for trial in range(1, num_rounds + 1):
             # Construct paths for this trial
@@ -329,6 +331,13 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         self.logger.info(f"Coordinator: Workflow complete. {results['rounds_completed']} rounds completed")
         return results
 
+    @action
+    async def get_remodel_indices(self,
+                                  pdb_file: Path):
+        u = mda.Universe(str(pdb_file))
+
+        sel = u.select_atoms('chainID B and around 4 chainID A')
+        return sel.residues.resids
 
 class LocalDesignCoordinator(BindCraftCoordinator):
     def __init__(self):
