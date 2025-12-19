@@ -54,20 +54,21 @@ class Chai(Folding):
         return fasta
 
     def write_constraint_file(self,
-                              constraints: Optional[dict]=None) -> Path:
+                              out: Path,
+                              constraints: Optional[dict]=None,) -> Path:
         header = 'chainA,res_idxA,chainB,res_idxB,connection_type,confidence,'
         header += 'min_distance_angstrom,max_distance_angstrom,comment,restraint_id'
-        template = Template('$chainA,$resA,$chainB,$resB,$const_type,0.0,0.0,$distance,,$i')
+        template = Template('$chainA,$resA,$chainB,$resB,$const_type,0.0,0.0,$distance,comment,$i')
 
         if constraints is None:
             return constraints
 
         constraints_text = [header]
-        for i, (const_type, constraint_params) in enumerate(constraints.items()):
+        for i, constraint_params in constraints.items():
             constraint_params['i'] = i
-            constraints_text.append(template(**constraint_params))
+            constraints_text.append(template.substitute(**constraint_params))
 
-        constraint_file = self.out / 'constraints.txt'
+        constraint_file = out / 'constraints.txt'
         constraint_file.write_text('\n'.join(constraints_text))
 
         return constraint_file
@@ -75,13 +76,13 @@ class Chai(Folding):
     def __call__(self,
                  seqs: list[str],
                  name: str,
-                 constraints: Optional[dict]=None) -> dict[str, Any]:
+                 constraints: Optional[list[dict]]=None) -> dict[str, Any]:
         out = self.devshm / name
         out.mkdir(exist_ok=True, parents=True)
         fasta = self.prepare(seqs, out)
 
         if constraints is not None:
-            constraints = self.write_constraint_file(constraints)
+            constraints = self.write_constraint_file(out, constraints)
 
         with tempfile.TemporaryDirectory(dir=str(out)) as tmpdir:
             tmp = Path(tmpdir)
