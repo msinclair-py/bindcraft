@@ -85,7 +85,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
     async def refold_sequences(self,
                                target_sequence: str,
                                sequences: list[str],
-                               trial: int) -> Result:
+                               trial: int,
+                               constraints: Optional[dict]=None) -> Result:
         self.logger.info(f'Forward folding: Folding {len(sequences)} seqs for trial {trial}')
         label = f'trial_{trial}'
 
@@ -96,7 +97,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             seqs = [target_sequence, seq]
             futures.append(
                 asyncio.wrap_future(
-                    fold_sequence_task(self.fold_alg, seqs, label, seq_label)
+                    fold_sequence_task(self.fold_alg, seqs, label, seq_label, constraints)
                 )
             )
 
@@ -184,6 +185,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         fasta_out: Path,
         remodel_indices: list[int],
         trial: int,
+        constraints: Optional[dict]=None
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
         self.logger.info(f"Coordinator: Starting design cycle for trial {trial}")
@@ -214,7 +216,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
             # Step 3: Refolding
             folded_structures = await self.refold_sequences(
-                target_sequence, filtered_sequences, trial
+                target_sequence, filtered_sequences, trial, constraints
             )
 
             self.logger.info('Measuring energy')
@@ -254,6 +256,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         binder_sequence: str,
         fasta_base_path: Path,
         pdb_base_path: Path,
+        constraints: Optional[dict]=None,
         remodel_indices: Optional[list[int]]=None, 
         num_rounds: int = 3,
     ) -> dict[str, Any]:
@@ -272,7 +275,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
-        structure = await self.refold_sequences(target_sequence, [binder_sequence], 0)
+        structure = await self.refold_sequences(target_sequence, [binder_sequence], 0, constraints)
         self.logger.info(structure)
 
         evaluated, _ = await self.evaluate_structures(structure)
@@ -310,6 +313,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                 fasta_out,
                 remodel_indices,
                 trial,
+                constraints,
             )
 
             results["all_cycles"].append(cycle_result)

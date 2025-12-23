@@ -145,15 +145,39 @@ class ChaiBinder(Chai):
         fasta_path.write_text(fasta_str)
 
         return fasta_path
+    
+    def write_constraint_file(self,
+                              out: Path,
+                              constraints: Optional[dict]=None,) -> Path:
+        header = 'chainA,res_idxA,chainB,res_idxB,connection_type,confidence,'
+        header += 'min_distance_angstrom,max_distance_angstrom,comment,restraint_id'
+        template = Template('$chainA,$resA,$chainB,$resB,$const_type,0.0,0.0,$distance,comment,$i')
+
+        if constraints is None:
+            return constraints
+
+        constraints_text = [header]
+        for i, constraint_params in constraints.items():
+            constraint_params['i'] = i
+            constraints_text.append(template.substitute(**constraint_params))
+
+        constraint_file = out / 'constraints.txt'
+        constraint_file.write_text('\n'.join(constraints_text))
+
+        return constraint_file
 
     def __call__(self, 
                  seqs: list[str],
                  exp_label: str,
-                 out_label: str) -> Path:
+                 out_label: str,
+                 constraints: Optional[dict]=None) -> Path:
         (self.fasta_dir / exp_label).mkdir(exist_ok=True)
         fasta = self.prepare(seqs, exp_label, out_label)
         out = self.devshm / exp_label
         out.mkdir(exist_ok=True, parents=True)
+        
+        if constraints is not None:
+            constraints = self.write_constraint_file(out, constraints)
 
         with tempfile.TemporaryDirectory(dir=str(out)) as tmpdir:
             tmp = Path(tmpdir)
@@ -163,6 +187,7 @@ class ChaiBinder(Chai):
                 device=self.device,
                 use_esm_embeddings=True,
                 num_diffn_timesteps=self.diffusion_steps,
+                constraint_path=constraints,
             )
 
             (self.out / exp_label).mkdir(exist_ok=True)
