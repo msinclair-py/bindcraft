@@ -41,7 +41,10 @@ def fold_sequence_task(
 ) -> dict:
     """Parsl task for folding a single sequence."""
 
-    result = fold_alg(sequence, label, seq_label, constraints)
+    try:
+        result = fold_alg(sequence, label, seq_label, constraints)
+    except:
+        result = fold_alg(sequence, label, constraints)
     return result
 
 @parsl.python_app
