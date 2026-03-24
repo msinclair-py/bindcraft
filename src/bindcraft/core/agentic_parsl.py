@@ -31,23 +31,56 @@ from ..util.quality_control import SequenceQualityControl
 
 logger = logging.getLogger(__name__)
 
+
+def _strip_glycan_chains_from_pdb(pdb_path, glycan_chain_ids):
+    """Return a temp PDB path with glycan chain ATOM/HETATM records removed."""
+    import tempfile
+    glycan_set = set(glycan_chain_ids)
+    kept = []
+    with open(pdb_path) as fh:
+        for line in fh:
+            if line.startswith(('ATOM', 'HETATM', 'TER')):
+                if len(line) > 21 and line[21] in glycan_set:
+                    continue
+            kept.append(line)
+    tmp = tempfile.NamedTemporaryFile(
+        suffix='.pdb', prefix='protein_only_', delete=False, mode='w'
+    )
+    tmp.writelines(kept)
+    tmp.flush()
+    tmp.close()
+    return Path(tmp.name)
+
+
 @parsl.python_app
 def fold_sequence_task(
     fold_alg: Folding,
-    sequence: str,
+    sequence: list,
     label: str,
     seq_label: str,
-    constraints: Optional[dict]=None,
-    glycan_chains: Optional[dict]=None,
-    glycan_restraint: str = None
+    constraints: Optional[str] = None,
+    glycan_chains: Optional[list] = None,
+    glycan_restraint: Optional[str] = None,
 ) -> dict:
-    """Parsl task for folding a single sequence."""
+    """Parsl task for folding a single sequence.
+
+    If *glycan_chains* is provided, each glycan sequence is appended to the
+    sequence list so Chai-1 sees them as additional chains.  The
+    *glycan_restraint* CSV (merged covalent-bond + existing restraints) is
+    used as the constraints source when no separate *constraints* path was
+    supplied.
+    """
+    if glycan_chains:
+        sequence = list(sequence) + [gc['sequence'] for gc in glycan_chains]
+        if constraints is None and glycan_restraint is not None:
+            constraints = glycan_restraint
 
     try:
         result = fold_alg(sequence, label, seq_label, constraints)
-    except:
+    except TypeError:
         result = fold_alg(sequence, label, constraints)
     return result
+
 
 @parsl.python_app
 def inverse_fold_task(
@@ -55,16 +88,33 @@ def inverse_fold_task(
     input_path: Path,
     pdb_path: Path,
     output_path: Path,
-    remodel_positions: list[int]
-) -> list[str]:
+    remodel_positions: list,
+    glycan_chains: Optional[list] = None,
+) -> list:
+    """Parsl task for inverse folding (ProteinMPNN).
 
-    sequences = inv_fold_alg(
-        input_path=input_path,
-        pdb_path=pdb_path,
-        output_path=output_path,
-        remodel_positions=remodel_positions,
-    )
-
+    When *glycan_chains* are present the glycan chain records are stripped from
+    the PDB before ProteinMPNN runs, because ProteinMPNN cannot process
+    non-standard residues.  The temporary stripped PDB is deleted afterwards.
+    """
+    import os
+    stripped_pdb = pdb_path
+    if glycan_chains:
+        glycan_ids = [gc['chain_id'] for gc in glycan_chains]
+        stripped_pdb = _strip_glycan_chains_from_pdb(Path(pdb_path), glycan_ids)
+    try:
+        sequences = inv_fold_alg(
+            input_path=input_path,
+            pdb_path=stripped_pdb,
+            output_path=output_path,
+            remodel_positions=remodel_positions,
+        )
+    finally:
+        if glycan_chains and stripped_pdb != pdb_path:
+            try:
+                os.unlink(stripped_pdb)
+            except OSError:
+                pass
     return sequences
 
 @parsl.python_app

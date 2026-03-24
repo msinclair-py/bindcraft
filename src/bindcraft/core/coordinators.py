@@ -121,16 +121,18 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                                  fasta_in: Path,
                                  pdb_path: Path,
                                  fasta_out: Path,
-                                 remodel_indices: list[int]) -> list[str]:
+                                 remodel_indices: list[int],
+                                 glycan_chains: Optional[list] = None) -> list[str]:
         self.logger.info('Inverse folding: Generating sequences')
-        
+
         sequences = await asyncio.wrap_future(
             inverse_fold_task(
                 inv_fold_alg=self.inv_fold_alg,
                 input_path=fasta_in,
                 pdb_path=pdb_path,
                 output_path=fasta_out,
-                remodel_positions=remodel_indices
+                remodel_positions=remodel_indices,
+                glycan_chains=glycan_chains,
             )
         )
 
@@ -187,7 +189,9 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         fasta_out: Path,
         remodel_indices: list[int],
         trial: int,
-        constraints: Optional[dict]=None
+        constraints: Optional[dict] = None,
+        glycan_chains: Optional[list] = None,
+        glycan_restraint_path: Optional[Path] = None,
     ) -> dict[str, Any]:
         """Run one complete design cycle."""
         self.logger.info(f"Coordinator: Starting design cycle for trial {trial}")
@@ -198,7 +202,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             while len(filtered_sequences) < self.nseqs and i < self.retries:
                 # Step 1: Inverse folding
                 generated_sequences = await self.generate_sequences(
-                    fasta_in, pdb_path, fasta_out, remodel_indices
+                    fasta_in, pdb_path, fasta_out, remodel_indices,
+                    glycan_chains=glycan_chains,
                 )
 
                 # Step 2: Quality control
@@ -218,7 +223,9 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
             # Step 3: Refolding
             folded_structures = await self.refold_sequences(
-                target_sequence, filtered_sequences, trial, constraints
+                target_sequence, filtered_sequences, trial, constraints,
+                glycan_chains=glycan_chains,
+                glycan_restraint_path=glycan_restraint_path,
             )
 
             self.logger.info('Measuring energy')
