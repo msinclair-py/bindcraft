@@ -76,7 +76,10 @@ class Chai(Folding):
     def __call__(self,
                  seqs: list[str],
                  name: str,
-                 constraints: Optional[list[dict]]=None) -> dict[str, Any]:
+                 constraints: Optional[list[dict]]=None,
+                 glycan_chains: Optional[list[dict]]=None,
+                 glycan_restraint_path: Optional[Path]=None) -> dict[str, Any]:
+
         out = self.devshm / name
         out.mkdir(exist_ok=True, parents=True)
         fasta = self.prepare(seqs, out)

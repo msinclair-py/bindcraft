@@ -37,7 +37,9 @@ def fold_sequence_task(
     sequence: str,
     label: str,
     seq_label: str,
-    constraints: Optional[dict]=None
+    constraints: Optional[dict]=None,
+    glycan_chains: Optional[dict]=None,
+    glycan_restraint: str = None
 ) -> dict:
     """Parsl task for folding a single sequence."""
 

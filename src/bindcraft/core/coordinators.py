@@ -86,7 +86,9 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                                target_sequence: str,
                                sequences: list[str],
                                trial: int,
-                               constraints: Optional[dict]=None) -> Result:
+                               constraints: Optional[dict]=None,
+                               glycan_chains: Optional[list[dict]] = None,
+                               glycan_restraint_path: Optional[Path] = None) -> Result:
         self.logger.info(f'Forward folding: Folding {len(sequences)} seqs for trial {trial}')
         label = f'trial_{trial}'
 
@@ -97,7 +99,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
             seqs = [target_sequence, seq]
             futures.append(
                 asyncio.wrap_future(
-                    fold_sequence_task(self.fold_alg, seqs, label, seq_label, constraints)
+                    fold_sequence_task(self.fold_alg, seqs, label, seq_label, constraints, glycan_chains, glycan_restraint_path)
                 )
             )
 
@@ -121,7 +123,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                                  fasta_out: Path,
                                  remodel_indices: list[int]) -> list[str]:
         self.logger.info('Inverse folding: Generating sequences')
-
+        
         sequences = await asyncio.wrap_future(
             inverse_fold_task(
                 inv_fold_alg=self.inv_fold_alg,
@@ -258,6 +260,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
         pdb_base_path: Path,
         constraints: Optional[dict]=None,
         remodel_indices: Optional[list[int]]=None, 
+        glycan_chains = None,
+        glycan_restraint_path = None,
         num_rounds: int = 3,
     ) -> dict[str, Any]:
         """Run the complete peptide design workflow."""
@@ -275,7 +279,7 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
 
         (fasta_base_path / 'trial_0').mkdir(exist_ok=True)
         (pdb_base_path / 'trial_0').mkdir(exist_ok=True)
-        structure = await self.refold_sequences(target_sequence, [binder_sequence], 0, constraints)
+        structure = await self.refold_sequences(target_sequence, [binder_sequence], 0, constraints, glycan_chains, glycan_restraint_path)
         self.logger.info(structure)
 
         evaluated, _ = await self.evaluate_structures(structure)
@@ -314,6 +318,8 @@ class ParslDesignCoordinator(Agent, BindCraftCoordinator):
                 remodel_indices,
                 trial,
                 constraints,
+                glycan_chains, 
+                glycan_restraint_path
             )
 
             results["all_cycles"].append(cycle_result)
